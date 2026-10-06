@@ -1,0 +1,20 @@
+{
+  "domain": "holm_mymenu",
+  "name": "HOLM My Menu",
+  "codeowners": [
+    "@kaaribou"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http",
+    "frontend",
+    "websocket_api"
+  ],
+  "documentation": "https://github.com/kaaribou/holm-mymenu",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/kaaribou/holm-mymenu/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "1.0.0"
+}

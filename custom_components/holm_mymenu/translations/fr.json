@@ -1,0 +1,9 @@
+{
+  "config": {
+    "step": { "user": { "title": "HOLM My Menu", "description": "Recettes, ingrédients, menus de la semaine et liste de courses.", "data": { "servings": "Nombre de personnes par défaut" } } },
+    "abort": { "single_instance_allowed": "HOLM My Menu est déjà configuré." }
+  },
+  "options": {
+    "step": { "init": { "title": "Options de HOLM My Menu", "description": "L'adresse et le jeton Mealie servent uniquement à importer vos recettes Mealie (Mealie → Profil → Jetons d'API).", "data": { "servings": "Nombre de personnes par défaut", "mealie_url": "Adresse de Mealie (ex. http://192.168.1.10:9925)", "mealie_token": "Jeton d'API Mealie" } } }
+  }
+}
