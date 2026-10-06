@@ -1,6 +1,9 @@
 {
   "domain": "holm_mymenu",
   "name": "HOLM My Menu",
+  "after_dependencies": [
+    "lovelace"
+  ],
   "codeowners": [
     "@kaaribou"
   ],
@@ -16,5 +19,5 @@
   "issue_tracker": "https://github.com/kaaribou/holm-mymenu/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "1.0.0"
+  "version": "1.0.1"
 }

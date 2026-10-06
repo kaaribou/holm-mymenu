@@ -73,7 +73,7 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
 
 Copiez le dossier `custom_components/holm_mymenu` dans `/config/custom_components/`, puis redémarrez Home Assistant.
 
-> La carte `holm-mymenu-card` est incluse et enregistrée par l'intégration : **aucune ressource Lovelace à ajouter**.
+> La carte `holm-mymenu-card` est incluse : l'intégration l'ajoute elle-même aux ressources Lovelace et met sa version à jour. **Rien à déclarer à la main.**
 
 ---
 
@@ -224,7 +224,7 @@ automation:
 ## FAQ / dépannage
 
 **« Custom element doesn't exist: holm-mymenu-card ».**
-Votre navigateur a gardé l'ancienne page en mémoire. Rechargez avec **Ctrl + Maj + R**. Dans l'application mobile : Paramètres → Application compagnon → Débogage → **Réinitialiser le cache du frontend**.
+Vérifiez dans *Paramètres → Tableaux de bord → ⋮ → Ressources* que `/holm_mymenu_static/holm-mymenu-card.js` est présent (l'intégration l'ajoute au démarrage ; en mode YAML, ajoutez-le vous-même en type *module*). Puis rechargez avec **Ctrl + Maj + R**. Dans l'application mobile : Paramètres → Application compagnon → Débogage → **Réinitialiser le cache du frontend**.
 
 **La recherche Open Food Facts ne répond pas.**
 Open Food Facts est un service gratuit, parfois saturé. Réessayez un peu plus tard. Vous pouvez aussi ajouter l'ingrédient sans produit et l'associer plus tard depuis sa fiche.

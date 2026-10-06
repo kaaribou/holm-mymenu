@@ -31,10 +31,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         card = os.path.join(os.path.dirname(__file__), "www", "holm-mymenu-card.js")
         digest = await hass.async_add_executor_job(_file_hash, card)
-        add_extra_js_url(hass, f"{CARD_URL}?v={VERSION}-{digest}")
+        url = f"{CARD_URL}?v={VERSION}-{digest}"
+        if not await _register_resource(hass, url):
+            add_extra_js_url(hass, url)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_options_updated))
     return True
+
+
+async def _register_resource(hass: HomeAssistant, url: str) -> bool:
+    """Déclare la carte comme ressource Lovelace (mode stockage) ; met à jour la version si besoin.
+
+    Une ressource est relue à chaque ouverture du tableau de bord : le navigateur ne peut pas
+    garder une ancienne version de la page sans la carte. Renvoie False en mode YAML.
+    """
+    try:
+        data = hass.data.get("lovelace")
+        resources = getattr(data, "resources", None) or (data.get("resources") if isinstance(data, dict) else None)
+        if resources is None or not hasattr(resources, "async_create_item"):
+            return False
+        if not getattr(resources, "loaded", True):
+            await resources.async_load()
+            resources.loaded = True
+        mine = [r for r in resources.async_items() if str(r.get("url", "")).split("?")[0] == CARD_URL]
+        if not mine:
+            await resources.async_create_item({"res_type": "module", "url": url})
+        else:
+            if mine[0].get("url") != url:
+                await resources.async_update_item(mine[0]["id"], {"res_type": "module", "url": url})
+            for extra in mine[1:]:
+                await resources.async_delete_item(extra["id"])
+        return True
+    except Exception as err:  # noqa: BLE001 — repli sur add_extra_js_url
+        _LOGGER.debug("Ressource Lovelace non enregistrée (%s), chargement par extra_js_url", err)
+        return False
 
 
 def _file_hash(path: str) -> str:

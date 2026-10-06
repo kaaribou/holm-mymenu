@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- La carte est maintenant déclarée automatiquement comme **ressource Lovelace** (mode stockage), avec un numéro de version qui change à chaque mise à jour. Corrige l'erreur « Custom element doesn't exist: holm-mymenu-card » qui pouvait apparaître au rechargement, sur ordinateur comme sur mobile, notamment dans une carte à onglets.
+
 ## 1.0.0 — première version
 
 - Intégration `holm_mymenu` : base locale de recettes, d'ingrédients, de menus (midi et soir) et de liste de courses, stockée dans Home Assistant.

@@ -5,7 +5,7 @@
  *   today_slots: [midi, soir]   list_height: 620   notify_service: notify.xxx   show_frame: false
  */
 (() => {
-const VERSION = "1.0.0";
+const VERSION = "1.0.1";
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
