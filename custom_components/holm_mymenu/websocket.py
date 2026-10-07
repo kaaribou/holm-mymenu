@@ -1,7 +1,9 @@
 """API WebSocket utilisée par la carte HOLM My Menu."""
 from __future__ import annotations
 
+import base64
 import logging
+from datetime import date
 
 import voluptuous as vol
 
@@ -12,6 +14,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import CONF_MEALIE_TOKEN, CONF_MEALIE_URL, DOMAIN, SIGNAL_UPDATED, SLOTS
 from .sources import SourceError, import_recipe_url, marmiton_search, mealie_recipe, mealie_recipes, off_product, off_search
+from .mailer import MailError, build_bodies, send_mail, smtp_settings
 from .store import MenuStore, gather_limited
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,7 +38,8 @@ def _err(connection, msg, e: Exception) -> None:
 def async_register(hass: HomeAssistant) -> None:
     for fn in (ws_subscribe, ws_ing_search, ws_ing_add, ws_ing_update, ws_ing_delete, ws_ing_merge, ws_recipe_get, ws_marmiton,
                ws_import, ws_recipe_save, ws_recipe_delete, ws_plan_set, ws_plan_add, ws_plan_move, ws_shop_generate, ws_shop_add,
-               ws_shop_toggle, ws_shop_remove, ws_mealie_list, ws_mealie_import):
+               ws_shop_toggle, ws_shop_remove, ws_mealie_list, ws_mealie_import, ws_contact_save, ws_contact_delete,
+               ws_shop_send, ws_stats, ws_image_upload, ws_barcode, ws_mail_info):
         websocket_api.async_register_command(hass, fn)
 
 
@@ -309,3 +313,124 @@ async def ws_mealie_import(hass, connection, msg):
         ok += 1
     store.changed("recipes")
     connection.send_result(msg["id"], {"imported": ok, "skipped": len(msg["slugs"]) - len(todo), "errors": errors[:5]})
+
+
+# ---------------- carnet d'adresses et envoi ----------------
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/contact/save", vol.Required("name"): str, vol.Required("email"): str,
+                                  vol.Optional("contact_id"): vol.Any(str, None)})
+@websocket_api.async_response
+async def ws_contact_save(hass, connection, msg):
+    store = _store(hass)
+    try:
+        c = store.save_contact(msg["name"], msg["email"], msg.get("contact_id"))
+    except ValueError as e:
+        return _err(connection, msg, e)
+    store.changed("contacts")
+    connection.send_result(msg["id"], c)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/contact/delete", vol.Required("contact_id"): str})
+@websocket_api.async_response
+async def ws_contact_delete(hass, connection, msg):
+    store = _store(hass)
+    store.delete_contact(msg["contact_id"])
+    store.changed("contacts")
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/mail/info"})
+@websocket_api.async_response
+async def ws_mail_info(hass, connection, msg):
+    s = smtp_settings(hass)
+    connection.send_result(msg["id"], {"smtp": bool(s), "sender": s["sender"] if s else "", "name": s["title"] if s else ""})
+
+
+def _shopping_groups(store: MenuStore) -> tuple[str, list]:
+    from .const import AISLES
+    sh = store.data["shopping"]
+    items = [i for i in sh.get("items", []) if not i.get("checked")]
+    groups = [(label, sorted([i for i in items if (i.get("aisle") or "autre") == key], key=lambda x: x["name"].lower())) for key, label in AISLES]
+    groups = [g for g in groups if g[1]]
+    rng = sh.get("range") or {}
+    title = "Liste de courses"
+    if rng.get("start"):
+        d = date.fromisoformat(rng["start"])
+        months = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
+        title += f" — semaine du {d.day} {months[d.month - 1]}"
+    return title, groups
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/shopping/send", vol.Optional("contacts", default=[]): [str],
+                                  vol.Optional("emails", default=[]): [str], vol.Optional("entities", default=[]): [str]})
+@websocket_api.async_response
+async def ws_shop_send(hass, connection, msg):
+    """Envoie la liste : un e-mail à toutes les adresses choisies, et une notification aux appareils choisis."""
+    store = _store(hass)
+    title, groups = _shopping_groups(store)
+    if not groups:
+        return connection.send_error(msg["id"], "holm_mymenu_error", "La liste de courses est vide")
+    text, body = build_bodies(title, groups, "Envoyé depuis HOLM My Menu")
+    emails = [c["email"] for c in store.data["contacts"] if c["id"] in msg["contacts"]] + [e.strip() for e in msg["emails"] if "@" in e]
+    emails = list(dict.fromkeys(emails))
+    sent = {"emails": [], "entities": []}
+    if emails:
+        settings = smtp_settings(hass)
+        if not settings:
+            return connection.send_error(msg["id"], "holm_mymenu_error", "Aucune intégration SMTP n'est configurée dans Home Assistant pour envoyer des e-mails")
+        try:
+            await hass.async_add_executor_job(send_mail, settings, emails, title, text, body)
+        except MailError as e:
+            return _err(connection, msg, e)
+        sent["emails"] = emails
+    short = "\n".join(f"{label} : " + ", ".join(i["name"] + (f" ({i['display']})" if i.get("display") else "") for i in items) for label, items in groups)
+    for ent in msg["entities"]:
+        if not ent.startswith("notify."):
+            continue
+        try:
+            await hass.services.async_call("notify", "send_message", {"title": title, "message": short}, target={"entity_id": ent}, blocking=True)
+            sent["entities"].append(ent)
+        except Exception as e:  # noqa: BLE001
+            return _err(connection, msg, e)
+    connection.send_result(msg["id"], sent)
+
+
+# ---------------- statistiques ----------------
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/stats"})
+@websocket_api.async_response
+async def ws_stats(hass, connection, msg):
+    connection.send_result(msg["id"], await _store(hass).stats())
+
+
+# ---------------- photos et code-barre ----------------
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/image/upload", vol.Required("kind"): vol.In(["recipe", "ingredient"]),
+                                  vol.Required("item_id"): str, vol.Required("data"): str})
+@websocket_api.async_response
+async def ws_image_upload(hass, connection, msg):
+    store = _store(hass)
+    obj = store.data["recipes" if msg["kind"] == "recipe" else "ingredients"].get(msg["item_id"])
+    if not obj:
+        return connection.send_error(msg["id"], "not_found", "Élément introuvable")
+    raw = msg["data"].split(",", 1)[-1]
+    try:
+        body = base64.b64decode(raw, validate=False)
+    except ValueError as e:
+        return _err(connection, msg, e)
+    if len(body) > 6_000_000 or not (body[:3] == b"\xff\xd8\xff" or body[:8] == b"\x89PNG\r\n\x1a\n" or body[8:12] == b"WEBP"):
+        return connection.send_error(msg["id"], "holm_mymenu_error", "Image non reconnue ou trop lourde")
+    await store.save_image(obj, body)
+    store.changed(msg["kind"])
+    connection.send_result(msg["id"], {"image": obj["image"]})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/ingredient/barcode", vol.Required("code"): str})
+@websocket_api.async_response
+async def ws_barcode(hass, connection, msg):
+    code = "".join(ch for ch in msg["code"] if ch.isdigit())
+    if len(code) < 6:
+        return connection.send_error(msg["id"], "holm_mymenu_error", "Code-barre invalide")
+    store = _store(hass)
+    have = next((i for i in store.data["ingredients"].values() if i.get("off_code") == code), None)
+    p = await off_product(async_get_clientsession(hass), code)
+    if not p and not have:
+        return connection.send_error(msg["id"], "not_found", f"Produit {code} inconnu d'Open Food Facts")
+    connection.send_result(msg["id"], {"product": p, "existing": have})

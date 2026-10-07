@@ -38,10 +38,13 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
 - 🛒 **Liste de courses** :
   - générée depuis la semaine choisie, avec les quantités mises à l'échelle et additionnées (1 l + 30 cl de lait = 1,3 l) ;
   - rangée par rayon, avec des articles ajoutés à la main et des cases à cocher en magasin ;
-  - **envoi par e-mail** (service de notification Home Assistant ou messagerie de l'appareil), copie ou vidage en un geste.
-- 🖼️ **Trois vues pour la carte** :
+  - **envoi par e-mail à plusieurs personnes** grâce au carnet d'adresses, et/ou en notification sur les téléphones ; copie ou vidage en un geste.
+- 📷 **Photos et code-barre** : photo d'une recette prise avec le téléphone ou choisie dans la galerie ; ajout d'un produit en **scannant son code-barre**.
+- 📊 **Statistiques** : recettes les plus planifiées, ingrédients les plus utilisés, repas par semaine, taille de la base.
+- 🖼️ **Quatre vues pour la carte** :
   - **Complet** pour tout gérer ;
-  - **Menu du jour** et **Semaine** en simple consultation, idéales pour une tablette murale. Un toucher sur un plat ou un produit l'affiche en grand.
+  - **Menu du jour** et **Semaine** en simple consultation, idéales pour une tablette murale. Un toucher sur un plat ou un produit l'affiche en grand ;
+  - **Statistiques**.
 - 🧩 **Capteurs** pour vos automatisations : menu du midi, menu du soir et prochain repas.
 
 ---
@@ -54,6 +57,7 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
 - [Recettes](#recettes)
 - [Ingrédients et Open Food Facts](#ingrédients-et-open-food-facts)
 - [Liste de courses](#liste-de-courses)
+- [Statistiques](#statistiques)
 - [Capteurs](#capteurs)
 - [FAQ / dépannage](#faq--dépannage)
 - [Crédits & licence](#crédits--licence)
@@ -100,18 +104,17 @@ type: custom:holm-mymenu-card
 | Option | Valeurs | Par défaut | Rôle |
 |---|---|---|---|
 | `title` | texte | `Menus` | Titre de la carte |
-| `view` | `full`, `today`, `week` | `full` | **Complet** (gestion), **Menu du jour** ou **Semaine** (consultation) |
-| `tab` | `week`, `recipes`, `ingredients`, `shopping` | `week` | Onglet affiché à l'ouverture (vue complète) |
+| `view` | `full`, `today`, `week`, `stats` | `full` | **Complet** (gestion), **Menu du jour** ou **Semaine** (consultation), **Statistiques** |
+| `tab` | `week`, `recipes`, `ingredients`, `shopping`, `stats` | `week` | Onglet affiché à l'ouverture (vue complète) |
 | `today_slots` | `[midi]`, `[soir]`, `[midi, soir]` | les deux | Repas affichés, dans toutes les vues |
 | `list_height` | nombre (px), `0` = sans limite | `620` | Hauteur des listes de recettes et d'ingrédients, qui se chargent au fil du défilement |
-| `notify_service` | ex. `notify.smtp` | — | Service proposé en premier pour envoyer la liste de courses |
 | `show_frame` | `true` / `false` | `true` | Afficher le fond et le cadre de la carte |
 
 Toutes ces options se règlent aussi dans l'éditeur visuel.
 
 ### Vue complète
 
-Quatre onglets : **Semaine**, **Recettes**, **Ingrédients** et **Courses**.
+Cinq onglets : **Semaine**, **Recettes**, **Ingrédients**, **Courses** et **Stats**.
 
 ![Recettes](docs/images/recettes.jpg)
 
@@ -149,7 +152,7 @@ Bouton **Ajouter** de l'onglet Recettes :
 - **Marmiton** : tapez « lasagnes », choisissez un résultat, c'est importé.
 - **Lien** : collez l'adresse d'une recette, de Marmiton ou d'un autre site qui publie le format schema.org (la plupart des sites de cuisine).
 - **Mealie** : cochez les recettes à importer (adresse et jeton dans les options de l'intégration). Les recettes déjà importées sont signalées.
-- **À la main** : nom, portions, temps, photo, une ligne par ingrédient, une ligne par étape.
+- **À la main** : nom, portions, temps, une ligne par ingrédient, une ligne par étape, et une **photo** : *Choisir une photo* (galerie du téléphone ou fichier) ou *Prendre une photo* avec l'appareil. Elle est réduite avant l'envoi et enregistrée sur votre Home Assistant.
 
 Dans la fiche d'une recette, vous pouvez :
 
@@ -166,8 +169,11 @@ Dans la fiche d'une recette, vous pouvez :
 
 - Les ingrédients sont créés automatiquement à l'import des recettes, sans doublon (« oignons » et « oignon » donnent le même ingrédient).
 - **Ajouter** cherche dans votre base et sur Open Food Facts. Choisissez un produit : sa fiche complète et sa photo sont enregistrées.
+- **Scanner** lit le code-barre d'un produit avec la caméra du téléphone ; vous pouvez aussi photographier le code ou taper son numéro (directement dans la recherche, par exemple `3017620422003`). La fiche Open Food Facts s'affiche, un toucher l'ajoute.
+  - Sur iPhone et iPad, la lecture passe par une petite bibliothèque chargée depuis Internet au moment du scan.
 - Dans la fiche d'un ingrédient, vous pouvez :
-  - modifier le nom, le rayon, la marque, le conditionnement, la photo et une note ;
+  - modifier le nom, le rayon, la marque, le conditionnement et une note ;
+  - choisir ou prendre une photo ;
   - associer un produit Open Food Facts, ou en changer ;
   - voir les recettes qui l'utilisent.
 
@@ -181,10 +187,34 @@ Dans la fiche d'une recette, vous pouvez :
 
 - Choisissez la semaine et touchez **Générer** : les ingrédients des repas prévus sont mis à l'échelle du nombre de personnes, additionnés et rangés par rayon.
 - Les articles déjà cochés et ceux ajoutés à la main sont conservés quand vous régénérez la liste.
-- **Envoyer par mail** propose deux moyens :
-  - un service de notification Home Assistant (`notify.smtp`, Gmail, application mobile…), avec un destinataire facultatif ;
-  - la messagerie de l'appareil, avec la liste déjà écrite.
+- **Envoyer par mail** ouvre la fenêtre d'envoi :
+  - un **carnet d'adresses** (Oliv, Ln, Margaux…) : cochez les personnes, ajoutez-en ou retirez-en ; vos choix sont retenus pour la fois suivante ;
+  - **un seul e-mail** part vers toutes les adresses cochées, mis en forme par rayon avec une case à cocher par article. Il utilise les réglages de votre intégration **SMTP** de Home Assistant (serveur, identifiants, expéditeur) : rien à ressaisir, et aucune adresse à déclarer comme destinataire SMTP ;
+  - les **téléphones et tablettes** (entités de notification) peuvent aussi être cochés : ils reçoivent la liste en notification ;
+  - **Ouvrir ma messagerie** prépare le même message dans la messagerie de l'appareil, avec les adresses cochées.
 - **Copier** met la liste dans le presse-papiers. **Vider la liste** repart de zéro.
+
+---
+
+## Statistiques
+
+![Statistiques](docs/images/stats.jpg)
+
+L'onglet **Stats** (ou une carte dédiée avec `view: stats`) montre :
+
+- les chiffres clés : recettes (favorites, jamais planifiées), ingrédients (avec fiche produit, avec photo), repas planifiés, place occupée par la base et les photos ;
+- les **recettes les plus planifiées**, avec le nombre de fois et la dernière date ; un toucher ouvre la recette ;
+- les **ingrédients les plus utilisés** (selon les recettes planifiées) ;
+- les **repas planifiés par semaine** sur les 8 dernières semaines ;
+- l'origine des recettes (Marmiton, Mealie, lien, à la main).
+
+Le compteur est conservé indéfiniment, même quand l'historique du planning est nettoyé.
+
+```yaml
+type: custom:holm-mymenu-card
+view: stats
+title: Nos habitudes
+```
 
 ---
 
@@ -231,6 +261,12 @@ Open Food Facts est un service gratuit, parfois saturé. Réessayez un peu plus 
 
 **Une recette Marmiton ne s'importe pas.**
 Marmiton peut changer sa page. Essayez l'import par **Lien** ; sinon, ouvrez une issue avec l'adresse de la recette.
+
+**L'envoi par e-mail échoue.**
+L'envoi utilise l'intégration **SMTP** de Home Assistant : vérifiez qu'elle est configurée et qu'elle fonctionne. Pour Gmail, il faut un *mot de passe d'application*. Sans intégration SMTP, utilisez « Ouvrir ma messagerie ».
+
+**Le scanner ne s'ouvre pas.**
+Le navigateur doit avoir l'autorisation d'utiliser la caméra, et Home Assistant doit être ouvert en HTTPS. Sinon, *Photographier le code* ou tapez son numéro.
 
 **Mealie : « Jeton Mealie refusé ».**
 Créez un nouveau jeton dans Mealie (Profil → Jetons d'API) et collez-le dans les options de l'intégration.

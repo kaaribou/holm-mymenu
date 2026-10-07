@@ -31,7 +31,8 @@ class MenuStore:
         self.hass = hass
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self.servings = servings
-        self.data: dict = {"ingredients": {}, "recipes": {}, "plan": {}, "shopping": {"items": [], "range": None}}
+        self.data: dict = {"ingredients": {}, "recipes": {}, "plan": {}, "shopping": {"items": [], "range": None},
+                           "contacts": [], "history": {}}
         self._img_dir = hass.config.path("www", "holm_mymenu")
 
     async def async_load(self) -> None:
@@ -40,12 +41,64 @@ class MenuStore:
             for k in self.data:
                 if k in d:
                     self.data[k] = d[k]
+        dirty = False
+        if not self.data["history"] and self.data["plan"]:
+            self._history_from_plan()
+            dirty = True
         self._clean_plan()
-        if self._repair_units():
+        if self._repair_units() or dirty:
             self.changed("all")
 
+    # ---------------- historique (recettes les plus planifiées) ----------------
+    def _history_from_plan(self) -> None:
+        for day in sorted(self.data["plan"]):
+            for entries in self.data["plan"][day].values():
+                for e in entries:
+                    if e.get("type") == "recipe":
+                        self._count(e["recipe_id"], day)
+
+    def _count(self, rid: str, day: str, n: int = 1) -> None:
+        h = self.data["history"].setdefault(rid, {"count": 0, "first": day, "last": day})
+        h["count"] = max(0, h["count"] + n)
+        if day > h.get("last", ""):
+            h["last"] = day
+        if day < h.get("first", day):
+            h["first"] = day
+
+    # ---------------- carnet d'adresses ----------------
+    def save_contact(self, name: str, email: str, cid: str | None = None) -> dict:
+        email = email.strip()
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+            raise ValueError("Adresse e-mail invalide")
+        for c in self.data["contacts"]:
+            if (cid and c["id"] == cid) or (not cid and c["email"].lower() == email.lower()):
+                c.update({"name": name.strip() or email, "email": email})
+                return c
+        c = {"id": _id(), "name": name.strip() or email, "email": email}
+        self.data["contacts"].append(c)
+        return c
+
+    def delete_contact(self, cid: str) -> None:
+        self.data["contacts"] = [c for c in self.data["contacts"] if c["id"] != cid]
+
+    # ---------------- photos envoyées depuis la carte ----------------
+    async def save_image(self, obj: dict, body: bytes) -> None:
+        name = f"{obj['id']}.jpg"
+
+        def _write() -> None:
+            os.makedirs(self._img_dir, exist_ok=True)
+            for ext in (".jpg", ".webp"):
+                old = os.path.join(self._img_dir, f"{obj['id']}{ext}")
+                if os.path.exists(old):
+                    os.remove(old)
+            with open(os.path.join(self._img_dir, name), "wb") as f:
+                f.write(body)
+        await self.hass.async_add_executor_job(_write)
+        obj["image"] = f"/local/holm_mymenu/{name}?v={int(time.time())}"
+        obj.pop("image_remote", None)
+
     _BAD_UNITS = {"gram", "grams", "kilogram", "kilograms", "liter", "liters", "milliliter", "milliliters",
-                  "tablespoon", "tablespoons", "teaspoon", "teaspoons", "tbsp", "tsp", "pinch"}
+                  "tablespoon", "tablespoons", "teaspoon", "teaspoons", "tbsp", "tsp", "pinch", "fluid"}
 
     def _repair_units(self) -> bool:
         """Corrige les lignes importées avec une unité anglaise (Mealie : « 400 gram blanc de poulet »)."""
@@ -220,6 +273,7 @@ class MenuStore:
 
     def delete_recipe(self, rid: str) -> None:
         self.data["recipes"].pop(rid, None)
+        self.data["history"].pop(rid, None)
         for day in self.data["plan"].values():
             for slot in list(day):
                 day[slot] = [e for e in day[slot] if e.get("recipe_id") != rid]
@@ -251,9 +305,10 @@ class MenuStore:
         rec["image"] = f"/local/holm_mymenu/{name}?v={int(time.time())}"
 
     # ---------------- planning ----------------
-    def set_slot(self, day: str, slot: str, entries: list[dict]) -> None:
+    def set_slot(self, day: str, slot: str, entries: list[dict], track: bool = True) -> None:
         if slot not in SLOTS:
             raise ValueError("créneau inconnu")
+        before = [e.get("recipe_id") for e in self.data["plan"].get(day, {}).get(slot, []) if e.get("type") == "recipe"]
         clean = []
         for e in entries:
             t = e.get("type")
@@ -263,6 +318,13 @@ class MenuStore:
                 clean.append({"type": "ingredient", "ingredient_id": e["ingredient_id"], "qty": e.get("qty"), "unit": e.get("unit") or ""})
             elif t == "text" and str(e.get("text") or "").strip():
                 clean.append({"type": "text", "text": str(e["text"]).strip()[:120]})
+        if track:
+            after = [e["recipe_id"] for e in clean if e["type"] == "recipe"]
+            for rid in set(after) - set(before):
+                self._count(rid, day)
+            for rid in set(before) - set(after):
+                if day >= date.today().isoformat():  # retiré d'un repas à venir : il n'a pas été mangé
+                    self._count(rid, day, -1)
         d = self.data["plan"].setdefault(day, {})
         if clean:
             d[slot] = clean
@@ -274,8 +336,8 @@ class MenuStore:
     def move_slot(self, src_day: str, src_slot: str, dst_day: str, dst_slot: str, swap: bool = True) -> None:
         a = list(self.data["plan"].get(src_day, {}).get(src_slot, []))
         b = list(self.data["plan"].get(dst_day, {}).get(dst_slot, []))
-        self.set_slot(dst_day, dst_slot, a)
-        self.set_slot(src_day, src_slot, b if swap else [])
+        self.set_slot(dst_day, dst_slot, a, track=False)
+        self.set_slot(src_day, src_slot, b if swap else [], track=False)
 
     def entry_label(self, e: dict) -> str:
         if e["type"] == "recipe":
@@ -363,10 +425,70 @@ class MenuStore:
             items = []
         self.data["shopping"]["items"] = items
 
+    # ---------------- statistiques ----------------
+    def _dir_size(self) -> tuple[int, int]:
+        total = n = 0
+        if os.path.isdir(self._img_dir):
+            for e in os.scandir(self._img_dir):
+                if e.is_file():
+                    total += e.stat().st_size
+                    n += 1
+        return total, n
+
+    async def stats(self) -> dict:
+        d = self.data
+        recipes, ings = d["recipes"], d["ingredients"]
+        img_bytes, img_n = await self.hass.async_add_executor_job(self._dir_size)
+        db_path = self.hass.config.path(".storage", STORAGE_KEY)
+        db_bytes = await self.hass.async_add_executor_job(lambda: os.path.getsize(db_path) if os.path.exists(db_path) else 0)
+        sources: dict[str, int] = {}
+        for r in recipes.values():
+            k = r.get("source") or ("web" if r.get("source_url") else "manuel")
+            sources[k] = sources.get(k, 0) + 1
+        hist = d["history"]
+        top = sorted(((rid, h) for rid, h in hist.items() if rid in recipes and h.get("count")), key=lambda x: (x[1]["count"], x[1].get("last", "")), reverse=True)[:15]
+        # ingrédients les plus utilisés : pondérés par le nombre de fois où leurs recettes ont été planifiées
+        ing_use: dict[str, int] = {}
+        for rid, h in hist.items():
+            for line in recipes.get(rid, {}).get("ingredients", []):
+                if line.get("ingredient_id") in ings:
+                    ing_use[line["ingredient_id"]] = ing_use.get(line["ingredient_id"], 0) + h.get("count", 0)
+        for day in d["plan"].values():
+            for es in day.values():
+                for e in es:
+                    if e.get("type") == "ingredient" and e.get("ingredient_id") in ings:
+                        ing_use[e["ingredient_id"]] = ing_use.get(e["ingredient_id"], 0) + 1
+        top_ing = sorted(ing_use.items(), key=lambda x: -x[1])[:15]
+        # repas planifiés par semaine (8 dernières semaines + semaine suivante)
+        today = date.today()
+        mon = today - timedelta(days=today.weekday())
+        weeks = []
+        for k in range(-7, 2):
+            w0 = mon + timedelta(weeks=k)
+            n_meals = sum(1 for i in range(7) for es in d["plan"].get((w0 + timedelta(days=i)).isoformat(), {}).values() if es)
+            weeks.append({"start": w0.isoformat(), "meals": n_meals})
+        planned_ever = {rid for rid, h in hist.items() if h.get("count")}
+        return {
+            "recipes": len(recipes), "ingredients": len(ings),
+            "ingredients_off": sum(1 for i in ings.values() if i.get("off_code")),
+            "ingredients_img": sum(1 for i in ings.values() if i.get("image")),
+            "recipes_img": sum(1 for r in recipes.values() if r.get("image")),
+            "favorites": sum(1 for r in recipes.values() if r.get("favorite")),
+            "never_planned": sum(1 for rid in recipes if rid not in planned_ever),
+            "meals_planned": sum(1 for day in d["plan"].values() for es in day.values() if es),
+            "shopping": len(d["shopping"].get("items", [])), "contacts": len(d["contacts"]),
+            "sources": sources, "db_bytes": db_bytes, "img_bytes": img_bytes, "img_files": img_n,
+            "top_recipes": [{"id": rid, "name": recipes[rid]["name"], "image": recipes[rid].get("image", ""), "count": h["count"], "last": h.get("last")} for rid, h in top],
+            "top_ingredients": [{"id": iid, "name": ings[iid]["name"], "image": ings[iid].get("image", ""), "count": n} for iid, n in top_ing],
+            "weeks": weeks,
+        }
+
     # ---------------- état pour la carte ----------------
     def snapshot(self) -> dict:
         return {"ingredients": self.data["ingredients"], "recipes": self.data["recipes"], "plan": self.data["plan"],
-                "shopping": self.data["shopping"], "aisles": AISLES, "slots": list(SLOTS), "servings": self.servings}
+                "shopping": self.data["shopping"], "contacts": self.data["contacts"],
+                "history": {k: v.get("count", 0) for k, v in self.data["history"].items()},
+                "aisles": AISLES, "slots": list(SLOTS), "servings": self.servings}
 
 
 async def gather_limited(coros, limit: int = 4):

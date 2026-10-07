@@ -11,6 +11,7 @@ _UNITS: dict[str, tuple[str, ...]] = {
     "kg": ("kg", "kilo", "kilos", "kilogramme", "kilogrammes", "kilogram", "kilograms"),
     "g": ("g", "gr", "grs", "gramme", "grammes", "gram", "grams"),
     "mg": ("mg",),
+    "fl oz": ("fluid ounce", "fluid ounces", "fl oz", "fl. oz"),
     "l": ("l", "litre", "litres", "liter", "liters", "litre(s)"),
     "dl": ("dl",),
     "cl": ("cl", "centilitre", "centilitres"),

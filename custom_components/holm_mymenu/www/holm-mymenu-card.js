@@ -1,11 +1,11 @@
 /* HOLM My Menu Card — menus de la semaine, recettes, ingrédients et liste de courses.
  * Fait partie de HOLM — Home Orchestration & Living Management. https://github.com/kaaribou/holm-mymenu — licence MIT
  *   type: custom:holm-mymenu-card
- *   title: Menus            view: full | today | week        tab: week | recipes | ingredients | shopping
- *   today_slots: [midi, soir]   list_height: 620   notify_service: notify.xxx   show_frame: false
+ *   title: Menus            view: full | today | week | stats        tab: week | recipes | ingredients | shopping | stats
+ *   today_slots: [midi, soir]   list_height: 620   show_frame: false
  */
 (() => {
-const VERSION = "1.0.1";
+const VERSION = "1.1.0";
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
@@ -58,14 +58,15 @@ class HolmMyMenuCard extends HTMLElement {
     else if (!s) body = `<div class="empty">Chargement…</div>`;
     else if (c.view === "today") body = this._today();
     else if (c.view === "week") body = this._weekRO();
-    else body = { week: this._weekView, recipes: this._recipesView, ingredients: this._ingView, shopping: this._shopView }[this._tab].call(this);
-    const tabs = [["week", "mdi:calendar-week", "Semaine"], ["recipes", "mdi:book-open-page-variant", "Recettes"], ["ingredients", "mdi:food-apple", "Ingrédients"], ["shopping", "mdi:cart-outline", "Courses"]];
+    else if (c.view === "stats") body = this._statsView();
+    else body = ({ week: this._weekView, recipes: this._recipesView, ingredients: this._ingView, shopping: this._shopView, stats: this._statsView }[this._tab] || this._weekView).call(this);
+    const tabs = [["week", "mdi:calendar-week", "Semaine"], ["recipes", "mdi:book-open-page-variant", "Recettes"], ["ingredients", "mdi:food-apple", "Ingrédients"], ["shopping", "mdi:cart-outline", "Courses"], ["stats", "mdi:chart-box-outline", "Stats"]];
     const nShop = s ? (s.shopping.items || []).filter((i) => !i.checked).length : 0;
     const keepModal = this.shadowRoot.querySelector(".modal-root");
     this.shadowRoot.innerHTML = `<style>${CSS}</style>
       <ha-card class="${c.show_frame === false ? "noframe" : ""}">
         <div class="hd"><div class="tt"><ha-icon icon="mdi:silverware-variant"></ha-icon>${esc(c.title)}</div>
-          ${c.view === "today" || c.view === "week" ? "" : `<div class="tabs">${tabs.map(([k, i, l]) => `<button class="tab ${this._tab === k ? "on" : ""}" data-tab="${k}"><ha-icon icon="${i}"></ha-icon><span>${l}</span>${k === "shopping" && nShop ? `<em>${nShop}</em>` : ""}</button>`).join("")}</div>`}
+          ${c.view === "today" || c.view === "week" || c.view === "stats" ? "" : `<div class="tabs">${tabs.map(([k, i, l]) => `<button class="tab ${this._tab === k ? "on" : ""}" data-tab="${k}"><ha-icon icon="${i}"></ha-icon><span>${l}</span>${k === "shopping" && nShop ? `<em>${nShop}</em>` : ""}</button>`).join("")}</div>`}
         </div>
         <div class="bd">${body}</div>
       </ha-card>`;
@@ -129,6 +130,7 @@ class HolmMyMenuCard extends HTMLElement {
       case "add-recipe": return this._addRecipeModal();
       case "fav-filter": this._favOnly = !this._favOnly; this._lim.recipes = 12; return this._render();
       case "more": return this._more();
+      case "stats-refresh": this._stats = null; return this._render();
       case "ing": return this._ingModal(d.id);
       case "add-ing": return this._addIngModal(this._q.ingredients || "");
       case "shop-gen": {
@@ -256,6 +258,52 @@ class HolmMyMenuCard extends HTMLElement {
       : `<div class="empty">${q ? `Aucun ingrédient « ${esc(this._q.ingredients)} ». <button class="lnk" data-act="add-ing">Le chercher sur Open Food Facts</button>` : "Aucun ingrédient pour l'instant."}</div>`}`;
   }
 
+  // ---------------- Statistiques ----------------
+  _loadStats() {
+    if (this._statsBusy) return;
+    this._statsBusy = true;
+    this._ws("stats").then((st) => { this._stats = st; this._statsAt = Date.now(); }).catch((e) => { this._stats = { error: (e && e.message) || String(e) }; })
+      .finally(() => { this._statsBusy = false; if (this._c.view === "stats" || this._tab === "stats") this._render(); });
+  }
+  _statsView() {
+    const st = this._stats;
+    if (!st || Date.now() - (this._statsAt || 0) > 60000) this._loadStats();
+    if (!st) return `<div class="empty">Calcul des statistiques…</div>`;
+    if (st.error) return `<div class="empty">${esc(st.error)}</div>`;
+    const size = (b) => b >= 1048576 ? `${fq(Math.round(b / 104857.6) / 10)} Mo` : `${Math.max(1, Math.round(b / 1024))} Ko`;
+    const SRC = { marmiton: "Marmiton", mealie: "Mealie", web: "Lien", manual: "À la main", manuel: "À la main" };
+    const tile = (icon, n, label, sub = "") => `<div class="stile"><ha-icon icon="${icon}"></ha-icon><b>${n}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ""}</div>`;
+    const wmax = Math.max(1, ...st.weeks.map((w) => w.meals));
+    const thisMon = iso(monday(new Date()));
+    const tmax = Math.max(1, ...st.top_recipes.map((r) => r.count));
+    const imax = Math.max(1, ...st.top_ingredients.map((r) => r.count));
+    const srcs = Object.entries(st.sources).sort((a, b) => b[1] - a[1]);
+    return `<div class="bar"><div class="wk">Votre base HOLM My Menu</div><button class="ib" data-act="stats-refresh" title="Actualiser"><ha-icon icon="mdi:refresh"></ha-icon></button></div>
+      <div class="stiles">
+        ${tile("mdi:book-open-page-variant", st.recipes, "recettes", `${st.favorites} favori${st.favorites > 1 ? "s" : ""} · ${st.never_planned} jamais planifiée${st.never_planned > 1 ? "s" : ""}`)}
+        ${tile("mdi:food-apple", st.ingredients, "ingrédients", `${st.ingredients_off} avec fiche produit · ${st.ingredients_img} avec photo`)}
+        ${tile("mdi:calendar-check", st.meals_planned, "repas planifiés", "sur les 8 dernières semaines et à venir")}
+        ${tile("mdi:database", size(st.db_bytes + st.img_bytes), "occupés", `base ${size(st.db_bytes)} · ${st.img_files} photos ${size(st.img_bytes)}`)}
+      </div>
+      <div class="scols">
+        <div class="sbox"><div class="sh">Recettes les plus planifiées</div>
+          ${st.top_recipes.length ? `<div class="toplist">${st.top_recipes.map((r, k) => `<div class="tr" data-act="recipe" data-id="${r.id}" title="Dernière fois : ${r.last ? fdate(new Date(r.last + "T00:00"), { day: "numeric", month: "long" }) : "—"}">
+              <span class="rk">${k + 1}</span><span class="ti" ${r.image ? `style="background-image:url('${esc(r.image)}');background-size:cover"` : ""}></span>
+              <span class="tn2"><b>${esc(r.name)}</b><span class="tbar"><i style="width:${Math.round((r.count / tmax) * 100)}%"></i></span></span><em>${r.count}×</em></div>`).join("")}</div>`
+            : `<div class="muted pad">Planifiez des repas : les recettes les plus cuisinées apparaîtront ici.</div>`}</div>
+        <div class="sbox"><div class="sh">Repas planifiés par semaine</div>
+          <div class="wbars" role="img" aria-label="Repas planifiés par semaine">${st.weeks.map((w) => { const d = new Date(w.start + "T00:00"); return `<div class="wb ${w.start === thisMon ? "now" : ""}" title="Semaine du ${fdate(d, { day: "numeric", month: "long" })} : ${w.meals} repas">
+              <span class="wv">${w.meals || ""}</span><span class="wcol"><i style="height:${Math.round((w.meals / wmax) * 100)}%"></i></span><span class="wl">${d.getDate()}/${d.getMonth() + 1}</span></div>`; }).join("")}</div>
+          <div class="sh">Ingrédients les plus utilisés</div>
+          ${st.top_ingredients.length ? `<div class="toplist sm">${st.top_ingredients.slice(0, 10).map((r) => `<div class="tr" data-act="ing" data-id="${r.id}">
+              <span class="ti ${r.image ? "" : "no"}" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}>${r.image ? "" : `<ha-icon icon="mdi:food-apple-outline"></ha-icon>`}</span>
+              <span class="tn2"><b>${esc(r.name)}</b><span class="tbar"><i style="width:${Math.round((r.count / imax) * 100)}%"></i></span></span><em>${r.count}</em></div>`).join("")}</div>` : `<div class="muted pad">—</div>`}
+          <div class="sh">Origine des recettes</div>
+          <div class="srcs">${srcs.map(([k, n]) => `<span class="chip">${esc(SRC[k] || k)} <b>${n}</b></span>`).join("") || "—"}</div>
+        </div>
+      </div>`;
+  }
+
   // ---------------- Courses ----------------
   _shopView() {
     const s = this._s, sh = s.shopping || {}, items = sh.items || [];
@@ -287,27 +335,64 @@ class HolmMyMenuCard extends HTMLElement {
     return `${head}\n\n${parts.join("\n\n") || "(liste vide)"}\n\n— HOLM My Menu`;
   }
   _shareModal() {
-    const svcs = Object.keys((this._hass.services || {}).notify || {}).filter((k) => k !== "send_message").sort();
-    let last = ""; try { last = localStorage.getItem("holm-mymenu-notify") || ""; } catch (_) {}
-    const def = (this._c.notify_service || last || "").replace(/^notify\./, "");
-    const text = this._shopText();
-    const mb = this._modal("Envoyer la liste de courses", `
-      <div class="sh">Par une notification Home Assistant (e-mail SMTP, Gmail, appli mobile…)</div>
-      ${svcs.length ? `<div class="row"><label class="fl">Service<select class="f svc">${svcs.map((k) => `<option value="${k}" ${k === def ? "selected" : ""}>notify.${k}</option>`).join("")}</select></label>
-        <label class="fl">Destinataire (facultatif)<input class="f to" placeholder="adresse e-mail, si le service le demande"></label></div>
-        <div class="row end"><button class="pill main" data-x="send"><ha-icon icon="mdi:send"></ha-icon>Envoyer</button></div>` : `<div class="muted">Aucun service de notification n'est configuré dans Home Assistant.</div>`}
-      <div class="sh">Ou depuis cet appareil</div>
-      <div class="row"><a class="pill" href="mailto:?subject=${encodeURIComponent(text.split("\n")[0])}&body=${encodeURIComponent(text)}"><ha-icon icon="mdi:email-edit-outline"></ha-icon>Ouvrir ma messagerie</a></div>
-      <div class="sh">Aperçu</div><pre class="prev">${esc(text)}</pre>`, { wide: true });
-    mb.querySelectorAll("input").forEach((x) => { x.addEventListener("keydown", (e) => e.stopPropagation()); x.addEventListener("keyup", (e) => e.stopPropagation()); });
-    mb.querySelector('[data-x="send"]')?.addEventListener("click", async () => {
-      const svc = mb.querySelector(".svc").value, to = mb.querySelector(".to").value.trim();
-      const data = { title: text.split("\n")[0], message: text };
-      if (to) data.target = to.split(/[,;\s]+/).filter(Boolean);
-      try { localStorage.setItem("holm-mymenu-notify", svc); } catch (_) {}
-      await this._do(this._hass.callService("notify", svc, data), "Liste envoyée");
-      this._close();
-    });
+    const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || "null") || d; } catch (_) { return d; } };
+    const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
+    const selC = new Set(load("holm-mymenu-to", [])), selE = new Set(load("holm-mymenu-devices", []));
+    let info = null;
+    this._ws("mail/info").then((x) => { info = x; draw(); }).catch(() => {});
+    const devices = () => Object.keys(this._hass.states).filter((e) => e.startsWith("notify.") && ((this._hass.entities || {})[e] || {}).platform !== "smtp")
+      .map((e) => [e, this._hass.states[e].attributes.friendly_name || e]).sort((a, b) => a[1].localeCompare(b[1], "fr"));
+    let draw = () => {
+      const contacts = (this._s.contacts || []).slice().sort((a, b) => a.name.localeCompare(b.name, "fr"));
+      const text = this._shopText();
+      const picked = contacts.filter((c) => selC.has(c.id));
+      const mailto = `mailto:${encodeURIComponent(picked.map((c) => c.email).join(","))}?subject=${encodeURIComponent(text.split("\n")[0])}&body=${encodeURIComponent(text)}`;
+      const devs = devices();
+      const mb = this._modal("Envoyer la liste de courses", `
+        <div class="sh">Par e-mail</div>
+        ${contacts.length ? `<div class="clist">${contacts.map((c) => `<label class="ct ${selC.has(c.id) ? "on" : ""}"><input type="checkbox" data-c="${c.id}" ${selC.has(c.id) ? "checked" : ""}>
+            <span class="av">${esc(c.name.slice(0, 1).toUpperCase())}</span><span class="cn"><b>${esc(c.name)}</b><small>${esc(c.email)}</small></span>
+            <button class="ib" data-del="${c.id}" title="Retirer du carnet"><ha-icon icon="mdi:close"></ha-icon></button></label>`).join("")}</div>`
+          : `<div class="muted">Votre carnet d'adresses est vide : ajoutez les personnes à qui envoyer la liste.</div>`}
+        <div class="row addc"><input class="f cnm" placeholder="Nom (Oliv, Ln…)"><input class="f grow cem" type="email" placeholder="adresse e-mail"><button class="pill" data-x="addc"><ha-icon icon="mdi:account-plus"></ha-icon>Ajouter</button></div>
+        ${info && !info.smtp ? `<div class="warn">Aucune intégration SMTP n'est configurée dans Home Assistant : utilisez « Ouvrir ma messagerie », ou ajoutez l'intégration SMTP pour envoyer directement.</div>` : info ? `<div class="muted small2">Envoyé par ${esc(info.sender)} (intégration ${esc(info.name)}), en un seul message à toutes les adresses cochées.</div>` : ""}
+        ${devs.length ? `<div class="sh">Sur un téléphone ou une tablette (notification)</div>
+          <div class="dlist">${devs.map(([e, n]) => `<label class="chip ${selE.has(e) ? "on" : ""}"><input type="checkbox" data-e="${e}" ${selE.has(e) ? "checked" : ""}>${esc(n)}</label>`).join("")}</div>` : ""}
+        <div class="row end sendrow"><a class="pill" href="${mailto}"><ha-icon icon="mdi:email-edit-outline"></ha-icon>Ouvrir ma messagerie</a>
+          <button class="pill main" data-x="send" ${selC.size || selE.size ? "" : "disabled"}><ha-icon icon="mdi:send"></ha-icon>Envoyer${selC.size + selE.size ? ` (${selC.size + selE.size})` : ""}</button></div>
+        <details class="adv"><summary>Aperçu de la liste</summary><pre class="prev">${esc(text)}</pre></details>`, { wide: true });
+      mb.querySelectorAll("input").forEach((x) => { x.addEventListener("keydown", (e) => e.stopPropagation()); x.addEventListener("keyup", (e) => e.stopPropagation()); });
+      mb.querySelectorAll("[data-c]").forEach((x) => x.addEventListener("change", () => { x.checked ? selC.add(x.dataset.c) : selC.delete(x.dataset.c); save("holm-mymenu-to", [...selC]); draw(); }));
+      mb.querySelectorAll("[data-e]").forEach((x) => x.addEventListener("change", () => { x.checked ? selE.add(x.dataset.e) : selE.delete(x.dataset.e); save("holm-mymenu-devices", [...selE]); draw(); }));
+      mb.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const c = contacts.find((x) => x.id === b.dataset.del);
+        if (!confirm(`Retirer ${c.name} du carnet d'adresses ?`)) return;
+        selC.delete(c.id); save("holm-mymenu-to", [...selC]);
+        await this._do(this._ws("contact/delete", { contact_id: c.id }));
+      }));
+      const add = async () => {
+        const nm = mb.querySelector(".cnm").value.trim(), em = mb.querySelector(".cem").value.trim();
+        if (!em) return this._toast("Indiquez une adresse e-mail");
+        const c = await this._do(this._ws("contact/save", { name: nm, email: em }), `${nm || em} ajouté au carnet`);
+        selC.add(c.id); save("holm-mymenu-to", [...selC]);
+      };
+      mb.querySelector('[data-x="addc"]').addEventListener("click", add);
+      mb.querySelector(".cem").addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+      mb.querySelector('[data-x="send"]').addEventListener("click", async (e) => {
+        const btn = e.currentTarget; btn.disabled = true; btn.lastChild.textContent = "Envoi…";
+        try {
+          const out = await this._ws("shopping/send", { contacts: [...selC], entities: [...selE] });
+          const n = out.emails.length, d = out.entities.length;
+          this._toast(`Liste envoyée${n ? ` à ${n} adresse${n > 1 ? "s" : ""}` : ""}${n && d ? " et" : ""}${d ? ` à ${d} appareil${d > 1 ? "s" : ""}` : ""}`);
+          this._close();
+        } catch (err) { this._toast(`Envoi impossible : ${(err && err.message) || err}`); draw(); }
+      });
+    };
+    const refresh = () => { const a = this.shadowRoot.activeElement; if (!a || !a.matches("input.cnm, input.cem")) draw(); };
+    const _draw = draw;
+    draw = () => { _draw(); this._refresher = refresh; };
+    draw();
   }
 
   // ---------------- fenêtres ----------------
@@ -433,6 +518,45 @@ class HolmMyMenuCard extends HTMLElement {
   _offTile(p, i) {
     return `<div class="off" data-off="${i}"><div class="oi" ${p.image ? `style="background-image:url('${esc(p.image)}')"` : ""}></div><div class="otn"><b>${esc(p.name)}</b><small>${esc([p.brand, p.quantity].filter(Boolean).join(" · "))}</small></div>${p.nutriscore ? `<span class="ns" style="background:${NUTRI[p.nutriscore] || "#888"}">${p.nutriscore.toUpperCase()}</span>` : ""}</div>`;
   }
+  // choisir une photo (galerie / fichier) ou la prendre avec l'appareil, réduite à 1280 px en JPEG
+  _pickImage(capture = false) {
+    return new Promise((resolve) => {
+      const inp = document.createElement("input");
+      inp.type = "file"; inp.accept = "image/*";
+      if (capture) inp.setAttribute("capture", "environment");
+      inp.style.display = "none";
+      inp.addEventListener("change", async () => {
+        const f = inp.files && inp.files[0]; inp.remove();
+        if (!f) return resolve(null);
+        try { resolve(await this._shrink(f)); } catch (e) { this._toast("Photo illisible"); resolve(null); }
+      });
+      document.body.appendChild(inp); inp.click();
+      setTimeout(() => inp.remove(), 120000);
+    });
+  }
+  async _shrink(file, max = 1280) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = url; });
+      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      return c.toDataURL("image/jpeg", 0.85);
+    } finally { URL.revokeObjectURL(url); }
+  }
+  _photoBox(current) {
+    return `<div class="photobox"><div class="pv" ${current ? `style="background-image:url('${esc(current)}')"` : ""}>${current ? "" : `<ha-icon icon="mdi:image-outline"></ha-icon>`}</div>
+      <div class="pb"><button class="pill" data-ph="pick"><ha-icon icon="mdi:image-plus"></ha-icon>Choisir une photo</button>
+        <button class="pill" data-ph="cam"><ha-icon icon="mdi:camera"></ha-icon>Prendre une photo</button></div></div>`;
+  }
+  _bindPhoto(root, onImage) {
+    root.querySelectorAll("[data-ph]").forEach((b) => b.addEventListener("click", async () => {
+      const data = await this._pickImage(b.dataset.ph === "cam");
+      if (!data) return;
+      const pv = root.querySelector(".photobox .pv"); if (pv) { pv.style.backgroundImage = `url('${data}')`; pv.innerHTML = ""; }
+      onImage(data);
+    }));
+  }
   _resRecipe(r) {
     return `<div class="ri2" data-rec="${r.id}"><div class="ei sm" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}>${r.image ? "" : `<ha-icon icon="mdi:chef-hat"></ha-icon>`}</div><b>${esc(r.name)}</b><small>${mins(r.total)}</small></div>`;
   }
@@ -501,11 +625,15 @@ class HolmMyMenuCard extends HTMLElement {
         <label class="fl">Préparation (min)<input class="f" type="number" min="0" data-f="prep" value="${r.prep || ""}"></label>
         <label class="fl">Cuisson (min)<input class="f" type="number" min="0" data-f="cook" value="${r.cook || ""}"></label></div>
       <label class="fl">Catégorie<input class="f" data-f="category" value="${esc(r.category || "")}" placeholder="Plat principal, dessert…"></label>
-      <label class="fl">Photo (adresse d'image, facultatif)<input class="f" data-f="image" value="${esc(r.image_remote || r.image || "")}"></label>
+      <div class="fl">Photo${this._photoBox(r.image)}</div>
+      <details class="adv"><summary>Ou une adresse d'image sur Internet</summary><input class="f" data-f="image" value="${esc(r.image_remote || (String(r.image || "").startsWith("http") ? r.image : ""))}" placeholder="https://…"></details>
       <label class="fl">Ingrédients — un par ligne (ex. « 200 g de farine »)<textarea class="f" rows="8" data-f="lines">${esc(lines)}</textarea></label>
       <label class="fl">Étapes — une par ligne<textarea class="f" rows="8" data-f="steps">${esc((r.steps || []).join("\n"))}</textarea></label>
       <div class="row end"><button class="pill" data-x="cancel">Annuler</button><button class="pill main" data-x="save"><ha-icon icon="mdi:content-save"></ha-icon>Enregistrer</button></div>`,
       { wide: true, back: isNew ? () => this._addRecipeModal() : () => this._recipeModal(r.id) });
+    let photo = null;
+    this._bindPhoto(mb, (d) => { photo = d; });
+    mb.querySelectorAll("input,textarea").forEach((x) => { x.addEventListener("keydown", (e) => e.stopPropagation()); x.addEventListener("keyup", (e) => e.stopPropagation()); });
     mb.querySelector('[data-x="cancel"]').addEventListener("click", () => (isNew ? this._close() : this._recipeModal(r.id)));
     mb.querySelector('[data-x="save"]').addEventListener("click", async () => {
       const v = (k) => mb.querySelector(`[data-f="${k}"]`).value.trim();
@@ -513,9 +641,10 @@ class HolmMyMenuCard extends HTMLElement {
       const rec = { name: v("name"), servings: +v("servings") || 4, prep: +v("prep") || null, cook: +v("cook") || null, category: v("category"),
         lines: v("lines").split("\n").map((x) => x.trim()).filter(Boolean), steps: v("steps").split("\n").map((x) => x.trim()).filter(Boolean) };
       rec.total = (rec.prep || 0) + (rec.cook || 0) || null;
-      const img = v("image"); if (img !== (r.image_remote || r.image || "")) rec.image = img;
+      const img = v("image"); if (!photo && img && img !== (r.image_remote || r.image || "")) rec.image = img;
       if (isNew) rec.source = "manual";
-      const out = await this._do(this._ws("recipe/save", { recipe_id: isNew ? null : r.id, recipe: rec }), "Recette enregistrée");
+      const out = await this._do(this._ws("recipe/save", { recipe_id: isNew ? null : r.id, recipe: rec }), photo ? null : "Recette enregistrée");
+      if (photo) await this._do(this._ws("image/upload", { kind: "recipe", item_id: out.id, data: photo }), "Recette et photo enregistrées");
       this._recipeModal(out.id);
     });
   }
@@ -565,11 +694,14 @@ class HolmMyMenuCard extends HTMLElement {
   // ----- ingrédients -----
   _addIngModal(q = "") {
     const cap = (v) => v.charAt(0).toUpperCase() + v.slice(1);
-    const mb = this._modal("Ajouter un ingrédient", `<div class="row"><input class="f grow" placeholder="Ex. purée, Nutella, crème fraîche…" value="${esc(q)}"><button class="pill main">Chercher</button></div><div class="res"></div>`, { wide: true });
+    const mb = this._modal("Ajouter un ingrédient", `<div class="row"><input class="f grow" placeholder="Ex. purée, Nutella… ou un code-barre" value="${esc(q)}"><button class="pill main">Chercher</button>
+      <button class="pill" data-x="scan" title="Scanner un code-barre"><ha-icon icon="mdi:barcode-scan"></ha-icon>Scanner</button></div><div class="res"></div>`, { wide: true });
     const inp = mb.querySelector("input"), res = mb.querySelector(".res");
     inp.addEventListener("keyup", (e) => e.stopPropagation());
+    mb.querySelector('[data-x="scan"]').addEventListener("click", async () => { const code = await this._scanBarcode(); if (code) this._barcodeResult(code); else if (code === "") this._addIngModal(inp.value.trim()); });
     const go = async () => {
       const v = inp.value.trim(); if (!v) return;
+      if (/^\d{8,14}$/.test(v.replace(/\s/g, ""))) return this._barcodeResult(v.replace(/\s/g, ""));
       res.innerHTML = `<div class="muted pad">Recherche dans votre base et sur Open Food Facts…</div>`;
       let out;
       try { out = await this._ws("ingredient/search", { query: v, off: true }); } catch (e) { res.innerHTML = `<div class="muted pad">${esc(e.message || e)}</div>`; return; }
@@ -590,6 +722,82 @@ class HolmMyMenuCard extends HTMLElement {
     mb.querySelector("button.main").addEventListener("click", go); inp.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") go(); });
     setTimeout(() => inp.focus(), 50);
     if (q) go();
+  }
+  // ----- code-barre -----
+  async _barcodeResult(code) {
+    const mb = this._modal(`Code-barre ${esc(code)}`, `<div class="muted pad">Recherche du produit sur Open Food Facts…</div>`, { wide: true, back: () => this._addIngModal() });
+    let out;
+    try { out = await this._ws("ingredient/barcode", { code }); } catch (e) {
+      mb.innerHTML = `<div class="muted pad">${esc(e.message || e)}</div><div class="row end"><button class="pill" data-x="again"><ha-icon icon="mdi:barcode-scan"></ha-icon>Scanner à nouveau</button></div>`;
+      mb.querySelector('[data-x="again"]').addEventListener("click", async () => { const c = await this._scanBarcode(); if (c) this._barcodeResult(c); });
+      return;
+    }
+    if (out.existing) { this._toast(`« ${out.existing.name} » est déjà dans vos ingrédients`); return this._ingModal(out.existing.id); }
+    const p = out.product;
+    mb.innerHTML = `<div class="ihead"><div class="oi big" ${p.image ? `style="background-image:url('${esc(p.image_full || p.image)}')"` : ""}></div>
+        <div class="ihd"><b style="font-size:16px">${esc(p.name)}</b><div class="ibr">${esc([p.brand, p.quantity].filter(Boolean).join(" · "))}</div>
+        ${p.nutriscore ? `<span class="ns lg" style="background:${NUTRI[p.nutriscore]}">Nutri-Score ${p.nutriscore.toUpperCase()}</span>` : ""}</div></div>
+      <label class="fl">Nom dans votre base<input class="f nm" value="${esc(p.name)}"></label>
+      <div class="row end"><button class="pill main" data-x="add"><ha-icon icon="mdi:plus"></ha-icon>Ajouter à mes ingrédients</button></div>`;
+    const nm = mb.querySelector(".nm"); nm.addEventListener("keydown", (e) => e.stopPropagation()); nm.addEventListener("keyup", (e) => e.stopPropagation());
+    mb.querySelector('[data-x="add"]').addEventListener("click", async (e) => {
+      e.currentTarget.disabled = true;
+      const name = nm.value.trim() || p.name;
+      const ing = await this._do(this._ws("ingredient/add", { name, off: p }), `« ${name} » ajouté avec sa fiche produit`);
+      this._ingModal(ing.id);
+    });
+  }
+  // lecture d'un code-barre : caméra (BarcodeDetector, sinon ZXing), photo du code, ou saisie
+  _scanBarcode() {
+    return new Promise((resolve) => {
+      let done = false, stream = null, timer = null, zx = null;
+      const stop = () => { clearInterval(timer); if (stream) stream.getTracks().forEach((t) => t.stop()); try { zx && zx.stop(); } catch (_) {} };
+      const finish = (code) => { if (done) return; done = true; stop(); resolve(code === "" ? "" : code || null); };
+      const mb = this._modal("Scanner un code-barre", `
+        <div class="scan"><video playsinline muted></video><div class="aim"></div><div class="scanmsg">Ouverture de la caméra…</div></div>
+        <div class="row"><input class="f grow code" inputmode="numeric" placeholder="ou tapez le numéro sous le code-barre"><button class="pill main" data-x="ok">Valider</button></div>
+        <div class="row"><button class="pill" data-x="photo"><ha-icon icon="mdi:camera"></ha-icon>Photographier le code</button></div>`, { back: () => { finish(""); } });
+      const root = this.shadowRoot.querySelector(".modal-root");
+      const obs = new MutationObserver(() => { if (!this.shadowRoot.contains(root) || !root.contains(mb)) { obs.disconnect(); finish(null); } });
+      obs.observe(this.shadowRoot, { childList: true, subtree: true });
+      const video = mb.querySelector("video"), msg = mb.querySelector(".scanmsg"), codeIn = mb.querySelector(".code");
+      codeIn.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter" && codeIn.value.trim()) finish(codeIn.value.replace(/\D/g, "")); });
+      codeIn.addEventListener("keyup", (e) => e.stopPropagation());
+      mb.querySelector('[data-x="ok"]').addEventListener("click", () => codeIn.value.trim() && finish(codeIn.value.replace(/\D/g, "")));
+      const FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"];
+      const zxing = async () => (await import("https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm"));
+      mb.querySelector('[data-x="photo"]').addEventListener("click", async () => {
+        const data = await this._pickImage(true); if (!data) return;
+        msg.textContent = "Lecture de la photo…";
+        try {
+          let code = null;
+          if ("BarcodeDetector" in window) {
+            const img = new Image(); img.src = data; await img.decode();
+            const r = await new window.BarcodeDetector({ formats: FORMATS }).detect(img); code = r[0] && r[0].rawValue;
+          } else {
+            const Z = await zxing(); const r = await new Z.BrowserMultiFormatReader().decodeFromImageUrl(data); code = r && r.getText();
+          }
+          if (code) finish(code); else msg.textContent = "Aucun code-barre lu sur la photo. Réessayez de plus près.";
+        } catch (e) { msg.textContent = "Aucun code-barre lu sur la photo. Réessayez de plus près."; }
+      });
+      (async () => {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { msg.textContent = "Caméra indisponible ici : photographiez le code ou tapez son numéro."; return; }
+        try {
+          if ("BarcodeDetector" in window) {
+            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+            if (done) return stop();
+            video.srcObject = stream; await video.play(); msg.textContent = "Visez le code-barre";
+            const det = new window.BarcodeDetector({ formats: FORMATS });
+            timer = setInterval(async () => { try { const r = await det.detect(video); if (r[0]) finish(r[0].rawValue); } catch (_) {} }, 250);
+          } else {
+            msg.textContent = "Chargement du lecteur…";
+            const Z = await zxing(); if (done) return;
+            zx = await new Z.BrowserMultiFormatReader().decodeFromConstraints({ video: { facingMode: { ideal: "environment" } } }, video, (r) => { if (r) finish(r.getText()); });
+            msg.textContent = "Visez le code-barre";
+          }
+        } catch (e) { msg.textContent = "Caméra refusée ou indisponible : photographiez le code ou tapez son numéro."; }
+      })();
+    });
   }
   _ingModal(id, ro = false, back = null) {
     const s = this._s, i = s.ingredients[id];
@@ -619,7 +827,7 @@ class HolmMyMenuCard extends HTMLElement {
       <div class="row"><label class="fl">Marque<input class="f" data-f="brand" value="${esc(i.brand || "")}"></label>
         <label class="fl">Conditionnement<input class="f" data-f="quantity" value="${esc(i.quantity || "")}" placeholder="500 g, 1 l…"></label>
         <label class="fl">Magasins<input class="f" data-f="stores" value="${esc(i.stores || "")}"></label></div>
-      <label class="fl">Photo (adresse d'image)<input class="f" data-f="image" value="${esc(i.image || "")}"></label>
+      <div class="fl">Photo${this._photoBox(i.image)}</div>
       <label class="fl">Notes<input class="f" data-f="notes" value="${esc(i.notes || "")}" placeholder="Ex. prendre la version bio"></label>
       <div class="row end"><button class="pill" data-x="off"><ha-icon icon="mdi:barcode-scan"></ha-icon>${i.off_code ? "Changer de produit" : "Associer un produit Open Food Facts"}</button><button class="pill main" data-x="save">Enregistrer</button></div>
       <div class="sh">Utilisé dans ${recs.length} recette${recs.length > 1 ? "s" : ""}</div>
@@ -628,6 +836,7 @@ class HolmMyMenuCard extends HTMLElement {
     mb.querySelectorAll("[data-r]").forEach((b) => b.addEventListener("click", () => this._recipeModal(b.dataset.r, () => this._ingModal(id, ro, back), { readonly: ro })));
     if (ro) return;
     mb.querySelectorAll("input").forEach((x) => { x.addEventListener("keydown", (e) => e.stopPropagation()); x.addEventListener("keyup", (e) => e.stopPropagation()); });
+    this._bindPhoto(mb, (d) => this._do(this._ws("image/upload", { kind: "ingredient", item_id: id, data: d }), "Photo enregistrée"));
     mb.querySelector('[data-x="save"]').addEventListener("click", async () => {
       const ch = {};
       mb.querySelectorAll("[data-f]").forEach((f) => { ch[f.dataset.f] = f.value.trim(); });
@@ -779,6 +988,33 @@ table.nut { width:100%; border-collapse:collapse; font-size:12.5px; } table.nut 
 pre.prev { white-space:pre-wrap; font:12.5px/1.45 var(--code-font-family, monospace); background:var(--sf); border-radius:12px; padding:10px 12px; max-height:220px; overflow:auto; margin:0; }
 a.pill { text-decoration:none; display:inline-flex; align-items:center; gap:6px; }
 .shopact { margin:-4px 0 12px; }
+.scan { position:relative; border-radius:16px; overflow:hidden; background:#000; aspect-ratio:4/3; margin-bottom:10px; }
+.scan video { width:100%; height:100%; object-fit:cover; display:block; }
+.scan .aim { position:absolute; left:12%; right:12%; top:35%; bottom:35%; border:2px solid rgba(255,255,255,.85); border-radius:12px; box-shadow:0 0 0 999px rgba(0,0,0,.35); }
+.scanmsg { position:absolute; left:0; right:0; bottom:10px; text-align:center; color:#fff; font-size:13px; text-shadow:0 1px 3px #000; padding:0 12px; }
+.photobox { display:flex; align-items:center; gap:12px; margin-top:4px; } .photobox .pv { width:86px; height:64px; border-radius:12px; flex:none; background:var(--sf) center/cover no-repeat; display:grid; place-items:center; color:var(--secondary-text-color); }
+.photobox .pb { display:flex; flex-wrap:wrap; gap:6px; } details.adv summary { cursor:pointer; font-size:12px; color:var(--secondary-text-color); margin:4px 0; } details.adv .f { width:100%; }
+.clist { display:flex; flex-direction:column; gap:5px; } .ct { display:flex; align-items:center; gap:10px; padding:6px 8px; border-radius:12px; background:var(--sf); cursor:pointer; }
+.ct.on { box-shadow:inset 0 0 0 1.5px var(--ac); } .ct input, .dlist input { accent-color:var(--ac); width:17px; height:17px; margin:0; }
+.av { width:30px; height:30px; border-radius:50%; display:grid; place-items:center; font-weight:800; background:color-mix(in srgb, var(--ac) 28%, transparent); flex:none; }
+.cn { flex:1; min-width:0; display:flex; flex-direction:column; } .cn small { color:var(--secondary-text-color); font-size:12px; overflow:hidden; text-overflow:ellipsis; }
+.addc { margin-top:8px; } .addc .cnm { flex:0 1 150px; } .dlist { display:flex; flex-wrap:wrap; gap:6px; } .dlist .chip { display:inline-flex; align-items:center; gap:6px; cursor:pointer; } .dlist .chip.on { border-color:var(--ac); }
+.warn { margin-top:8px; padding:8px 10px; border-radius:10px; font-size:12.5px; background:color-mix(in srgb, #e3a21a 16%, transparent); } .sendrow { margin-top:14px; } .pill[disabled] { opacity:.5; pointer-events:none; }
+.stiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:8px; margin-bottom:12px; }
+.stile { display:flex; flex-direction:column; gap:2px; padding:12px; border-radius:14px; background:var(--sf); } .stile ha-icon { color:var(--ac); --mdc-icon-size:20px; margin-bottom:4px; }
+.stile b { font-size:24px; font-weight:800; line-height:1.1; } .stile span { font-size:13px; color:var(--primary-text-color); } .stile small { font-size:11.5px; color:var(--secondary-text-color); }
+.scols { display:grid; grid-template-columns:1fr 1fr; gap:12px; } @container (max-width:640px) { .scols { grid-template-columns:1fr; } }
+.sbox { padding:4px 2px; min-width:0; } .toplist { display:flex; flex-direction:column; gap:4px; }
+.tr { display:flex; align-items:center; gap:9px; padding:5px 6px; border-radius:10px; cursor:pointer; } .tr:hover { background:var(--sf); }
+.tr .rk { width:18px; text-align:right; font-size:12px; font-weight:700; color:var(--secondary-text-color); flex:none; } .tr .ti { width:34px; height:34px; border-radius:9px; background-color:var(--sf); }
+.toplist.sm .tr .ti { width:26px; height:26px; border-radius:50%; background-size:contain; background-color:#fff; } .toplist.sm .tr .ti.no { background-color:var(--sf); }
+.tn2 { flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; } .tn2 b { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tbar { height:6px; border-radius:3px; background:var(--sf); overflow:hidden; } .tbar i { display:block; height:100%; border-radius:3px; background:var(--ac); }
+.tr em { font-style:normal; font-size:12.5px; font-weight:700; color:var(--primary-text-color); min-width:28px; text-align:right; }
+.wbars { display:flex; align-items:stretch; gap:6px; height:130px; padding:4px 0 2px; } .wb { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; min-width:0; cursor:default; }
+.wcol { flex:1; width:100%; max-width:30px; display:flex; align-items:flex-end; border-bottom:1px solid var(--bd); } .wcol i { display:block; width:100%; border-radius:4px 4px 0 0; background:color-mix(in srgb, var(--ac) 55%, transparent); min-height:0; }
+.wb.now .wcol i { background:var(--ac); } .wb:hover .wcol i { background:var(--ac); } .wv { font-size:11px; font-weight:700; height:14px; } .wl { font-size:10.5px; color:var(--secondary-text-color); } .wb.now .wl { color:var(--ac); font-weight:700; }
+.srcs { display:flex; flex-wrap:wrap; gap:6px; } .srcs b { margin-left:4px; }
 .off.busy, .ri2.busy { opacity:.5; pointer-events:none; }
 .in { min-width:0; flex:1; display:flex; flex-direction:column; } .in b { font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .in small { font-size:11.5px; color:var(--secondary-text-color); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ns { font-size:11px; font-weight:800; color:#fff; padding:2px 7px; border-radius:6px; display:inline-block; }
@@ -848,15 +1084,14 @@ class HolmMyMenuCardEditor extends HTMLElement {
     if (!this._hass || !this._c) return;
     if (!this._f) {
       this._f = document.createElement("ha-form");
-      this._f.computeLabel = (s) => ({ title: "Titre", view: "Affichage", tab: "Onglet à l'ouverture", show_frame: "Afficher le cadre", notify_service: "Service de notification pour envoyer la liste (ex. notify.smtp)", today_slots: "Repas affichés (toutes les vues)", list_height: "Hauteur des listes en px (0 = sans limite)" }[s.name] || s.name);
+      this._f.computeLabel = (s) => ({ title: "Titre", view: "Affichage", tab: "Onglet à l'ouverture", show_frame: "Afficher le cadre", today_slots: "Repas affichés (toutes les vues)", list_height: "Hauteur des listes en px (0 = sans limite)" }[s.name] || s.name);
       this._f.schema = [{ name: "title", selector: { text: {} } },
         { type: "grid", name: "", schema: [
-          { name: "view", selector: { select: { mode: "dropdown", options: [{ value: "full", label: "Complet (semaine, recettes, ingrédients, courses)" }, { value: "today", label: "Menu du jour (compact, consultation)" }, { value: "week", label: "Semaine (planning, consultation)" }] } } },
-          { name: "tab", selector: { select: { mode: "dropdown", options: [{ value: "week", label: "Semaine" }, { value: "recipes", label: "Recettes" }, { value: "ingredients", label: "Ingrédients" }, { value: "shopping", label: "Courses" }] } } }] },
+          { name: "view", selector: { select: { mode: "dropdown", options: [{ value: "full", label: "Complet (semaine, recettes, ingrédients, courses)" }, { value: "today", label: "Menu du jour (compact, consultation)" }, { value: "week", label: "Semaine (planning, consultation)" }, { value: "stats", label: "Statistiques" }] } } },
+          { name: "tab", selector: { select: { mode: "dropdown", options: [{ value: "week", label: "Semaine" }, { value: "recipes", label: "Recettes" }, { value: "ingredients", label: "Ingrédients" }, { value: "shopping", label: "Courses" }, { value: "stats", label: "Statistiques" }] } } }] },
         { name: "today_slots", selector: { select: { multiple: true, mode: "list", options: [{ value: "midi", label: "Midi" }, { value: "soir", label: "Soir" }] } } },
         { name: "list_height", selector: { number: { min: 0, max: 2000, step: 20, mode: "box", unit_of_measurement: "px" } } },
-        { name: "show_frame", selector: { boolean: {} } },
-        { name: "notify_service", selector: { text: {} } }];
+        { name: "show_frame", selector: { boolean: {} } }];
       this._f.addEventListener("value-changed", (e) => {
         const v = { ...this._c, ...e.detail.value };
         ["view", "tab"].forEach((k) => { if (v[k] === { view: "full", tab: "week" }[k]) delete v[k]; });

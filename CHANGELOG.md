@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0
+
+- **Envoi de la liste par e-mail à plusieurs personnes** (#5, #4) : carnet d'adresses (nom + adresse) dans la fenêtre d'envoi ; un seul message, mis en forme par rayon, vers toutes les adresses cochées, avec les réglages de l'intégration SMTP de Home Assistant. Envoi possible en notification vers les téléphones et tablettes (entités `notify`). L'ancienne action `notify.<service>`, déclarée obsolète par Home Assistant, n'est plus utilisée.
+- **Photo d'une recette** prise avec l'appareil ou choisie dans la galerie, réduite puis enregistrée localement (#3). Même chose sur la fiche d'un ingrédient.
+- **Ajout d'un ingrédient par son code-barre** : caméra, photo du code ou saisie du numéro, puis fiche Open Food Facts (#2).
+- **Statistiques** : onglet « Stats » et vue `view: stats` — chiffres clés, recettes les plus planifiées, ingrédients les plus utilisés, repas par semaine, origine des recettes, taille de la base (#1). Le compteur des recettes est conservé indéfiniment.
+- L'unité « fluid ounce » des recettes Mealie est reconnue ; les ingrédients concernés sont réparés au démarrage.
+- L'option de carte `notify_service` est retirée (remplacée par la fenêtre d'envoi).
+
 ## 1.0.1
 
 - La carte est maintenant déclarée automatiquement comme **ressource Lovelace** (mode stockage), avec un numéro de version qui change à chaque mise à jour. Corrige l'erreur « Custom element doesn't exist: holm-mymenu-card » qui pouvait apparaître au rechargement, sur ordinateur comme sur mobile, notamment dans une carte à onglets.
