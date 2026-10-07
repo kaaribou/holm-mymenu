@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1
+
+- « Prendre une photo » ouvre maintenant l'appareil photo **dans la carte** (déclencheur, caméra avant/arrière). L'application mobile Home Assistant ouvrait la galerie à la place. Si l'accès à la caméra est refusé, la carte revient au sélecteur du système.
+
 ## 1.1.0
 
 - **Envoi de la liste par e-mail à plusieurs personnes** (#5, #4) : carnet d'adresses (nom + adresse) dans la fenêtre d'envoi ; un seul message, mis en forme par rayon, vers toutes les adresses cochées, avec les réglages de l'intégration SMTP de Home Assistant. Envoi possible en notification vers les téléphones et tablettes (entités `notify`). L'ancienne action `notify.<service>`, déclarée obsolète par Home Assistant, n'est plus utilisée.

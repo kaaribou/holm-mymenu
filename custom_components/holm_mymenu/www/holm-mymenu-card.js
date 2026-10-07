@@ -5,7 +5,7 @@
  *   today_slots: [midi, soir]   list_height: 620   show_frame: false
  */
 (() => {
-const VERSION = "1.1.0";
+const VERSION = "1.1.1";
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
@@ -519,7 +519,16 @@ class HolmMyMenuCard extends HTMLElement {
     return `<div class="off" data-off="${i}"><div class="oi" ${p.image ? `style="background-image:url('${esc(p.image)}')"` : ""}></div><div class="otn"><b>${esc(p.name)}</b><small>${esc([p.brand, p.quantity].filter(Boolean).join(" · "))}</small></div>${p.nutriscore ? `<span class="ns" style="background:${NUTRI[p.nutriscore] || "#888"}">${p.nutriscore.toUpperCase()}</span>` : ""}</div>`;
   }
   // choisir une photo (galerie / fichier) ou la prendre avec l'appareil, réduite à 1280 px en JPEG
-  _pickImage(capture = false) {
+  async _pickImage(capture = false) {
+    // « Prendre une photo » : caméra intégrée à la carte (l'application Home Assistant ignore souvent
+    // l'attribut capture et ouvre la galerie) ; repli sur le sélecteur du système si la caméra est refusée.
+    if (capture) {
+      const shot = await this._cameraShot();
+      if (shot !== "fallback") return shot;
+    }
+    return this._filePick(capture);
+  }
+  _filePick(capture) {
     return new Promise((resolve) => {
       const inp = document.createElement("input");
       inp.type = "file"; inp.accept = "image/*";
@@ -532,6 +541,41 @@ class HolmMyMenuCard extends HTMLElement {
       });
       document.body.appendChild(inp); inp.click();
       setTimeout(() => inp.remove(), 120000);
+    });
+  }
+  _cameraShot() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.resolve("fallback");
+    return new Promise((resolve) => {
+      let stream = null, facing = "environment", done = false;
+      const ov = document.createElement("div");
+      ov.className = "camov";
+      ov.innerHTML = `<div class="camwrap"><video playsinline muted autoplay></video><div class="cammsg">Ouverture de l'appareil photo…</div>
+        <div class="cambar"><button class="ib camx" title="Annuler"><ha-icon icon="mdi:close"></ha-icon></button>
+          <button class="shutter" title="Prendre la photo" disabled></button>
+          <button class="ib camflip" title="Changer de caméra"><ha-icon icon="mdi:camera-flip-outline"></ha-icon></button></div></div>`;
+      this.shadowRoot.appendChild(ov);
+      const video = ov.querySelector("video"), msg = ov.querySelector(".cammsg"), shutter = ov.querySelector(".shutter");
+      const stop = () => { if (stream) stream.getTracks().forEach((t) => t.stop()); stream = null; };
+      const finish = (v) => { if (done) return; done = true; stop(); ov.remove(); resolve(v); };
+      const start = async () => {
+        stop(); shutter.disabled = true;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false });
+          if (done) return stop();
+          video.srcObject = stream; await video.play();
+          msg.textContent = ""; shutter.disabled = false;
+        } catch (e) { finish("fallback"); }
+      };
+      ov.querySelector(".camx").addEventListener("click", () => finish(null));
+      ov.querySelector(".camflip").addEventListener("click", () => { facing = facing === "environment" ? "user" : "environment"; start(); });
+      shutter.addEventListener("click", () => {
+        const w = video.videoWidth, h = video.videoHeight; if (!w || !h) return;
+        const k = Math.min(1, 1280 / Math.max(w, h));
+        const c = document.createElement("canvas"); c.width = Math.round(w * k); c.height = Math.round(h * k);
+        c.getContext("2d").drawImage(video, 0, 0, c.width, c.height);
+        finish(c.toDataURL("image/jpeg", 0.85));
+      });
+      start();
     });
   }
   async _shrink(file, max = 1280) {
@@ -988,6 +1032,13 @@ table.nut { width:100%; border-collapse:collapse; font-size:12.5px; } table.nut 
 pre.prev { white-space:pre-wrap; font:12.5px/1.45 var(--code-font-family, monospace); background:var(--sf); border-radius:12px; padding:10px 12px; max-height:220px; overflow:auto; margin:0; }
 a.pill { text-decoration:none; display:inline-flex; align-items:center; gap:6px; }
 .shopact { margin:-4px 0 12px; }
+.camov { position:fixed; inset:0; z-index:10000; background:#000; display:flex; align-items:center; justify-content:center; }
+.camwrap { position:relative; width:100%; height:100%; max-width:900px; display:flex; flex-direction:column; }
+.camwrap video { flex:1; width:100%; min-height:0; object-fit:contain; background:#000; }
+.cammsg { position:absolute; top:45%; left:0; right:0; text-align:center; color:#fff; font-size:14px; }
+.cambar { display:flex; align-items:center; justify-content:space-around; padding:18px 12px calc(18px + env(safe-area-inset-bottom)); background:#000; }
+.cambar .ib { color:#fff; background:rgba(255,255,255,.12); width:46px; height:46px; }
+.shutter { width:72px; height:72px; border-radius:50%; border:4px solid #fff; background:rgba(255,255,255,.25); padding:0; } .shutter:active { background:#fff; } .shutter[disabled] { opacity:.4; }
 .scan { position:relative; border-radius:16px; overflow:hidden; background:#000; aspect-ratio:4/3; margin-bottom:10px; }
 .scan video { width:100%; height:100%; object-fit:cover; display:block; }
 .scan .aim { position:absolute; left:12%; right:12%; top:35%; bottom:35%; border:2px solid rgba(255,255,255,.85); border-radius:12px; box-shadow:0 0 0 999px rgba(0,0,0,.35); }

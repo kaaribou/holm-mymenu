@@ -268,6 +268,9 @@ L'envoi utilise l'intégration **SMTP** de Home Assistant : vérifiez qu'elle es
 **Le scanner ne s'ouvre pas.**
 Le navigateur doit avoir l'autorisation d'utiliser la caméra, et Home Assistant doit être ouvert en HTTPS. Sinon, *Photographier le code* ou tapez son numéro.
 
+**Mobile : à la première photo, l'application revient à l'accueil de Home Assistant.**
+C'est l'application Home Assistant qui se recharge après la demande d'autorisation de la caméra. Choisissez « Pendant l'utilisation de l'application » : la question ne revient plus, et il suffit de rouvrir la page des menus cette fois-là.
+
 **Mealie : « Jeton Mealie refusé ».**
 Créez un nouveau jeton dans Mealie (Profil → Jetons d'API) et collez-le dans les options de l'intégration.
 
