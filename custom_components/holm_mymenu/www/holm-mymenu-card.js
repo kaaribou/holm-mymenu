@@ -5,7 +5,7 @@
  *   today_slots: [midi, soir]   list_height: 620   show_frame: false
  */
 (() => {
-const VERSION = "1.1.1";
+const VERSION = "1.1.2";
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
@@ -76,6 +76,13 @@ class HolmMyMenuCard extends HTMLElement {
   _moreHtml(more, total, word) {
     return more > 0 ? `<button class="more" data-act="more">Afficher la suite · ${more} ${word}${more > 1 ? "s" : ""} sur ${total}</button>` : "";
   }
+  _watchMore(lst, root) {
+    if (this._moreObs) this._moreObs.disconnect();
+    if (!("IntersectionObserver" in window)) return;
+    this._moreObs = new IntersectionObserver((ents) => { if (ents.some((e) => e.isIntersecting)) this._more(); }, { root, rootMargin: "0px 0px 300px 0px" });
+    this._moreList = lst;
+    const m = lst.querySelector(".more"); if (m) this._moreObs.observe(m);
+  }
   _more() {
     const k = this._tab === "recipes" ? "recipes" : "ingredients";
     this._lim[k] += k === "recipes" ? 12 : 36;
@@ -86,6 +93,7 @@ class HolmMyMenuCard extends HTMLElement {
     const box = this.shadowRoot && this.shadowRoot.querySelector(".lst");
     if (!box || !this._s) return false;
     box.innerHTML = this._tab === "recipes" ? this._recipesList() : this._ingList();
+    if (this._moreObs) { this._moreObs.disconnect(); const m = box.querySelector(".more"); if (m) setTimeout(() => this._moreObs && this._moreObs.observe(m), 50); }
     box.querySelectorAll("[data-act]").forEach((el) => el.addEventListener(el.dataset.ev || "click", (e) => this._act(el.dataset.act, el, e)));
     return true;
   }
@@ -114,8 +122,13 @@ class HolmMyMenuCard extends HTMLElement {
       qi.addEventListener("keydown", (e) => e.stopPropagation());
     }
     const lst = r.querySelector(".lst");
-    if (lst) lst.addEventListener("scroll", () => { if (lst.scrollTop + lst.clientHeight > lst.scrollHeight - 160 && lst.querySelector(".more")) this._more(); }, { passive: true });
-    if (lst && this._c.list_height !== 0) lst.style.maxHeight = `${this._c.list_height || 620}px`;
+    if (lst) {
+      // Sur écran tactile, pas de zone de défilement imbriquée : la page défile normalement
+      // (une liste qui défile dans une page qui défile bloque le doigt). La suite se charge à l'approche du bas.
+      const touch = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+      if (!touch && this._c.list_height !== 0) lst.style.maxHeight = `${this._c.list_height || 620}px`;
+      this._watchMore(lst, touch || this._c.list_height === 0 ? null : lst);
+    }
     const ai = r.querySelector("input.shop-add");
     if (ai) ai.addEventListener("keydown", (e) => { if (e.key === "Enter" && ai.value.trim()) { this._do(this._ws("shopping/add", { name: ai.value.trim() })); ai.value = ""; } });
   }
@@ -1000,7 +1013,8 @@ input.search, .f { flex:1; min-width:0; box-sizing:border-box; padding:9px 12px;
 .rsl { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:8px; }
 @container (max-width:420px) { .rday { grid-template-columns:1fr; gap:4px; } .rdn { flex-direction:row; gap:8px; align-items:baseline; padding:2px 4px; background:none; } .rdn span { font-size:15px; } }
 .tempty { font-size:13px; color:var(--secondary-text-color); padding-bottom:4px; }
-.lst { overflow-y:auto; overscroll-behavior:contain; margin-right:-6px; padding-right:6px; scrollbar-width:thin; }
+.lst { overflow-y:auto; margin-right:-6px; padding-right:6px; scrollbar-width:thin; }
+@media (pointer: coarse) { .lst { max-height:none !important; overflow:visible; margin-right:0; padding-right:0; } }
 .more { display:block; width:100%; margin:10px 0 2px; padding:9px; border-radius:12px; border:1px dashed var(--bd); background:none; color:var(--secondary-text-color); font-size:13px; } .more:hover { color:var(--primary-text-color); border-color:var(--ac); }
 /* recettes */
 .rgrid, .mgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; }

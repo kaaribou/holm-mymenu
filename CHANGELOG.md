@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2
+
+- Sur téléphone et tablette, les listes de recettes et d'ingrédients n'ont plus de zone de défilement imbriquée : la page défile normalement au doigt, et la suite se charge à l'approche du bas. Sur ordinateur, la zone de défilement reste, et la page reprend la main une fois en haut ou en bas de la liste.
+
 ## 1.1.1
 
 - « Prendre une photo » ouvre maintenant l'appareil photo **dans la carte** (déclencheur, caméra avant/arrière). L'application mobile Home Assistant ouvrait la galerie à la place. Si l'accès à la caméra est refusé, la carte revient au sélecteur du système.
