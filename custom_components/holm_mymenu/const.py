@@ -1,11 +1,12 @@
 """Constantes de HOLM My Menu."""
 DOMAIN = "holm_mymenu"
-VERSION = "1.1.2"
+VERSION = "1.1.3"
 STORAGE_KEY = "holm_mymenu"
 STORAGE_VERSION = 1
 SLOTS = ("midi", "soir")
 CARD_URL = "/holm_mymenu_static/holm-mymenu-card.js"
 STATIC_PATH = "/holm_mymenu_static"
+MEDIA_PATH = "/holm_mymenu_media"  # photos des recettes et ingrédients (config/www/holm_mymenu)
 USER_AGENT = "HOLM-MyMenu/1.0 (Home Assistant; https://github.com/kaaribou/holm-mymenu)"
 CONF_MEALIE_URL = "mealie_url"
 CONF_MEALIE_TOKEN = "mealie_token"

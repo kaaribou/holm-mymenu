@@ -10,6 +10,8 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
 
 > ✨ **Une seule carte pour tout faire, zéro YAML.** La carte est fournie par l'intégration : aucune ressource Lovelace à ajouter.
 
+![Les recettes](docs/images/apercu.jpg)
+
 ![La semaine](docs/images/semaine.jpg)
 
 | Une recette | Un repas | Un produit |
@@ -89,7 +91,7 @@ Copiez le dossier `custom_components/holm_mymenu` dans `/config/custom_component
    - **Adresse de Mealie** (ex. `http://192.168.1.10:9925`) et **jeton d'API Mealie** (Mealie → Profil → Jetons d'API), pour importer vos recettes Mealie ;
    - le nombre de personnes par défaut peut être changé à tout moment.
 
-Tout est stocké localement dans Home Assistant (`.storage/holm_mymenu`), et les photos dans `www/holm_mymenu/`.
+Tout est stocké localement dans Home Assistant (`.storage/holm_mymenu`), et les photos dans `www/holm_mymenu/`. Ce dossier est créé par l'intégration et ses photos sont servies par elle-même : rien à préparer, et elles s'affichent même si le dossier `www` n'existait pas encore.
 
 ---
 
@@ -188,7 +190,7 @@ Dans la fiche d'une recette, vous pouvez :
 - Choisissez la semaine et touchez **Générer** : les ingrédients des repas prévus sont mis à l'échelle du nombre de personnes, additionnés et rangés par rayon.
 - Les articles déjà cochés et ceux ajoutés à la main sont conservés quand vous régénérez la liste.
 - **Envoyer par mail** ouvre la fenêtre d'envoi :
-  - un **carnet d'adresses** (Oliv, Ln, Margaux…) : cochez les personnes, ajoutez-en ou retirez-en ; vos choix sont retenus pour la fois suivante ;
+  - un **carnet d'adresses** (Marie, Paul, Léa…) : cochez les personnes, ajoutez-en ou retirez-en ; vos choix sont retenus pour la fois suivante ;
   - **un seul e-mail** part vers toutes les adresses cochées, mis en forme par rayon avec une case à cocher par article. Il utilise les réglages de votre intégration **SMTP** de Home Assistant (serveur, identifiants, expéditeur) : rien à ressaisir, et aucune adresse à déclarer comme destinataire SMTP ;
   - les **téléphones et tablettes** (entités de notification) peuvent aussi être cochés : ils reçoivent la liste en notification ;
   - **Ouvrir ma messagerie** prépare le même message dans la messagerie de l'appareil, avec les adresses cochées.

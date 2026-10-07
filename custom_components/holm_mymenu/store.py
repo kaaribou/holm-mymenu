@@ -15,7 +15,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.storage import Store
 
-from .const import AISLES, SIGNAL_UPDATED, SLOTS, STORAGE_KEY, STORAGE_VERSION
+from .const import AISLES, MEDIA_PATH, SIGNAL_UPDATED, SLOTS, STORAGE_KEY, STORAGE_VERSION
 from .parser import guess_aisle, ingredient_key, parse_line, pretty_qty, singular_name, to_base
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,13 +41,29 @@ class MenuStore:
             for k in self.data:
                 if k in d:
                     self.data[k] = d[k]
-        dirty = False
+        dirty = self._migrate_media()
         if not self.data["history"] and self.data["plan"]:
             self._history_from_plan()
             dirty = True
         self._clean_plan()
         if self._repair_units() or dirty:
             self.changed("all")
+
+    def _migrate_media(self) -> bool:
+        """Anciennes adresses /local/holm_mymenu/… → /holm_mymenu_media/… (indépendant de /local)."""
+        changed = False
+        for coll in ("recipes", "ingredients"):
+            for o in self.data[coll].values():
+                img = o.get("image") or ""
+                if img.startswith("/local/holm_mymenu/"):
+                    o["image"] = MEDIA_PATH + img[len("/local/holm_mymenu"):]
+                    changed = True
+        for it in self.data["shopping"].get("items", []):
+            img = it.get("image") or ""
+            if img.startswith("/local/holm_mymenu/"):
+                it["image"] = MEDIA_PATH + img[len("/local/holm_mymenu"):]
+                changed = True
+        return changed
 
     # ---------------- historique (recettes les plus planifiées) ----------------
     def _history_from_plan(self) -> None:
@@ -94,7 +110,7 @@ class MenuStore:
             with open(os.path.join(self._img_dir, name), "wb") as f:
                 f.write(body)
         await self.hass.async_add_executor_job(_write)
-        obj["image"] = f"/local/holm_mymenu/{name}?v={int(time.time())}"
+        obj["image"] = f"{MEDIA_PATH}/{name}?v={int(time.time())}"
         obj.pop("image_remote", None)
 
     _BAD_UNITS = {"gram", "grams", "kilogram", "kilograms", "liter", "liters", "milliliter", "milliliters",
@@ -302,7 +318,7 @@ class MenuStore:
                 f.write(body)
         await self.hass.async_add_executor_job(_write)
         rec["image_remote"] = url
-        rec["image"] = f"/local/holm_mymenu/{name}?v={int(time.time())}"
+        rec["image"] = f"{MEDIA_PATH}/{name}?v={int(time.time())}"
 
     # ---------------- planning ----------------
     def set_slot(self, day: str, slot: str, entries: list[dict], track: bool = True) -> None:

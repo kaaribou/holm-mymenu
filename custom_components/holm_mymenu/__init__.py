@@ -11,7 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-from .const import CARD_URL, CONF_SERVINGS, DOMAIN, STATIC_PATH, VERSION
+from .const import CARD_URL, CONF_SERVINGS, DOMAIN, MEDIA_PATH, STATIC_PATH, VERSION
 from .store import MenuStore
 from .websocket import async_register
 
@@ -26,9 +26,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN] = {"store": store, "options": dict(entry.options)}
     if first:
         async_register(hass)
-        await hass.http.async_register_static_paths(
-            [StaticPathConfig(STATIC_PATH, os.path.join(os.path.dirname(__file__), "www"), False)]
-        )
+        # dossier des photos : créé ici et servi par l'intégration elle-même, pour fonctionner
+        # même si config/www n'existait pas au démarrage de Home Assistant (/local inactif)
+        media = hass.config.path("www", "holm_mymenu")
+        await hass.async_add_executor_job(lambda: os.makedirs(media, exist_ok=True))
+        await hass.http.async_register_static_paths([
+            StaticPathConfig(STATIC_PATH, os.path.join(os.path.dirname(__file__), "www"), False),
+            StaticPathConfig(MEDIA_PATH, media, False),
+        ])
         card = os.path.join(os.path.dirname(__file__), "www", "holm-mymenu-card.js")
         digest = await hass.async_add_executor_job(_file_hash, card)
         url = f"{CARD_URL}?v={VERSION}-{digest}"

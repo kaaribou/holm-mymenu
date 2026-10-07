@@ -5,7 +5,7 @@
  *   today_slots: [midi, soir]   list_height: 620   show_frame: false
  */
 (() => {
-const VERSION = "1.1.2";
+const VERSION = "1.1.3";
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
@@ -367,7 +367,7 @@ class HolmMyMenuCard extends HTMLElement {
             <span class="av">${esc(c.name.slice(0, 1).toUpperCase())}</span><span class="cn"><b>${esc(c.name)}</b><small>${esc(c.email)}</small></span>
             <button class="ib" data-del="${c.id}" title="Retirer du carnet"><ha-icon icon="mdi:close"></ha-icon></button></label>`).join("")}</div>`
           : `<div class="muted">Votre carnet d'adresses est vide : ajoutez les personnes à qui envoyer la liste.</div>`}
-        <div class="row addc"><input class="f cnm" placeholder="Nom (Oliv, Ln…)"><input class="f grow cem" type="email" placeholder="adresse e-mail"><button class="pill" data-x="addc"><ha-icon icon="mdi:account-plus"></ha-icon>Ajouter</button></div>
+        <div class="row addc"><input class="f cnm" placeholder="Nom (Marie, Paul…)"><input class="f grow cem" type="email" placeholder="adresse e-mail"><button class="pill" data-x="addc"><ha-icon icon="mdi:account-plus"></ha-icon>Ajouter</button></div>
         ${info && !info.smtp ? `<div class="warn">Aucune intégration SMTP n'est configurée dans Home Assistant : utilisez « Ouvrir ma messagerie », ou ajoutez l'intégration SMTP pour envoyer directement.</div>` : info ? `<div class="muted small2">Envoyé par ${esc(info.sender)} (intégration ${esc(info.name)}), en un seul message à toutes les adresses cochées.</div>` : ""}
         ${devs.length ? `<div class="sh">Sur un téléphone ou une tablette (notification)</div>
           <div class="dlist">${devs.map(([e, n]) => `<label class="chip ${selE.has(e) ? "on" : ""}"><input type="checkbox" data-e="${e}" ${selE.has(e) ? "checked" : ""}>${esc(n)}</label>`).join("")}</div>` : ""}

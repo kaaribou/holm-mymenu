@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.3
+
+- Le dossier des photos `www/holm_mymenu/` est créé dès l'installation, et les photos sont servies par l'intégration elle-même (`/holm_mymenu_media/…`) : elles s'affichent même si le dossier `www` n'existait pas au démarrage de Home Assistant. Les adresses déjà enregistrées sont converties automatiquement.
+
 ## 1.1.2
 
 - Sur téléphone et tablette, les listes de recettes et d'ingrédients n'ont plus de zone de défilement imbriquée : la page défile normalement au doigt, et la suite se charge à l'approche du bas. Sur ordinateur, la zone de défilement reste, et la page reprend la main une fois en haut ou en bas de la liste.
