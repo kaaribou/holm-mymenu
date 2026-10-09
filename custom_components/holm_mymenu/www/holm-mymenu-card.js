@@ -5,7 +5,7 @@
  *   today_slots: [midi, soir]   list_height: 620   show_frame: false
  */
 (() => {
-const VERSION = "1.1.3";
+const VERSION = "1.1.4";
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
@@ -17,6 +17,26 @@ const SLOT_LBL = { midi: "Midi", soir: "Soir" };
 const NUTRI = { a: "#038141", b: "#85bb2f", c: "#fecb02", d: "#ee8100", e: "#e63e11" };
 const fq = (q) => { if (q == null) return ""; const r = Math.round(q * 100) / 100; return (r === Math.floor(r) ? String(r) : String(r).replace(".", ",")); };
 
+// Garde la position de défilement pendant un nouveau rendu complet de la carte.
+// Sur iOS (WebKit, sans « scroll anchoring »), remplacer le contenu de la carte la fait rétrécir un instant :
+// la page, plus courte, remonte d'un coup. On fige la hauteur de la carte et on remet le défilement en place.
+const keepScroll = (host, fn) => {
+  const saved = [];
+  let n = host;
+  while (n) {
+    n = n.assignedSlot || n.parentNode || n.host;
+    if (n && n.nodeType === 1 && n.scrollHeight > n.clientHeight) saved.push([n, n.scrollTop]);
+  }
+  const se = document.scrollingElement;
+  if (se) saved.push([se, se.scrollTop]);
+  const h = host.offsetHeight;
+  if (h) host.style.minHeight = `${h}px`;
+  try { fn(); } finally {
+    const restore = () => saved.forEach(([el, t]) => { if (Math.abs(el.scrollTop - t) > 1) el.scrollTop = t; });
+    restore();
+    requestAnimationFrame(() => { restore(); host.style.minHeight = ""; requestAnimationFrame(restore); });
+  }
+};
 class HolmMyMenuCard extends HTMLElement {
   setConfig(c) {
     this._c = { title: "Menus", view: "full", tab: "week", ...c };
@@ -52,6 +72,9 @@ class HolmMyMenuCard extends HTMLElement {
   // ---------------- rendu principal ----------------
   _render() {
     if (!this.shadowRoot || !this._c) return;
+    keepScroll(this, () => this._renderNow());
+  }
+  _renderNow() {
     const c = this._c, s = this._s;
     let body;
     if (this._err) body = `<div class="empty">${esc(this._err)}</div>`;
@@ -92,7 +115,7 @@ class HolmMyMenuCard extends HTMLElement {
   _renderList() {
     const box = this.shadowRoot && this.shadowRoot.querySelector(".lst");
     if (!box || !this._s) return false;
-    box.innerHTML = this._tab === "recipes" ? this._recipesList() : this._ingList();
+    keepScroll(this, () => { box.innerHTML = this._tab === "recipes" ? this._recipesList() : this._ingList(); });
     if (this._moreObs) { this._moreObs.disconnect(); const m = box.querySelector(".more"); if (m) setTimeout(() => this._moreObs && this._moreObs.observe(m), 50); }
     box.querySelectorAll("[data-act]").forEach((el) => el.addEventListener(el.dataset.ev || "click", (e) => this._act(el.dataset.act, el, e)));
     return true;

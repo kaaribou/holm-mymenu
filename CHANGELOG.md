@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.1.4
+- **iPhone / iPad : la page ne remonte plus toute seule.** Changer d'onglet, cocher un article ou ouvrir un élément pouvait faire remonter la page d'un coup sur iOS (Safari et application Home Assistant). La carte garde maintenant sa hauteur pendant qu'elle se redessine, et la position de défilement est conservée.
+
 ## 1.1.3
 
 - Le dossier des photos `www/holm_mymenu/` est créé dès l'installation, et les photos sont servies par l'intégration elle-même (`/holm_mymenu_media/…`) : elles s'affichent même si le dossier `www` n'existait pas au démarrage de Home Assistant. Les adresses déjà enregistrées sont converties automatiquement.
