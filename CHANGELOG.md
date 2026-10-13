@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.5
+- **Plusieurs recettes dans un même repas : toutes les photos s'affichent** (#6). Avec deux recettes illustrées, le fond du repas est partagé en deux, en diagonale ; avec trois, en trois bandes, et un badge « +1 », « +2 »… indique les photos en plus. Dans la vue Semaine comme dans le menu du jour.
+- iPhone / iPad : la carte ne garde plus une hauteur figée quand elle est rafraîchie dans un onglet caché.
+
 ## 1.1.4
 - **iPhone / iPad : la page ne remonte plus toute seule.** Changer d'onglet, cocher un article ou ouvrir un élément pouvait faire remonter la page d'un coup sur iOS (Safari et application Home Assistant). La carte garde maintenant sa hauteur pendant qu'elle se redessine, et la position de défilement est conservée.
 

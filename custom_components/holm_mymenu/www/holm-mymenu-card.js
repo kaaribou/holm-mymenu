@@ -5,7 +5,7 @@
  *   today_slots: [midi, soir]   list_height: 620   show_frame: false
  */
 (() => {
-const VERSION = "1.1.4";
+const VERSION = "1.1.5";
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
@@ -34,8 +34,20 @@ const keepScroll = (host, fn) => {
   try { fn(); } finally {
     const restore = () => saved.forEach(([el, t]) => { if (Math.abs(el.scrollTop - t) > 1) el.scrollTop = t; });
     restore();
-    requestAnimationFrame(() => { restore(); host.style.minHeight = ""; requestAnimationFrame(restore); });
+    let done = false;
+    const release = () => { if (done) return; done = true; restore(); host.style.minHeight = ""; requestAnimationFrame(restore); };
+    requestAnimationFrame(release);
+    setTimeout(release, 500); // onglet caché : requestAnimationFrame ne se déclenche pas
+
   }
+};
+// fond d'un repas : une photo, ou plusieurs photos côte à côte quand le repas compte plusieurs recettes illustrées (#6)
+const heroBg = (recs) => {
+  const imgs = [...new Set(recs.filter((r) => r && r.image).map((r) => r.image))];
+  if (!imgs.length) return { cls: "", attr: "", html: "" };
+  if (imgs.length === 1) return { cls: "img", attr: `style="--img:url('${esc(imgs[0])}')"`, html: "" };
+  const shown = imgs.slice(0, 3), more = imgs.length - shown.length;
+  return { cls: "img multi", attr: "", html: `<div class="hims n${shown.length}">${shown.map((u) => `<span style="background-image:url('${esc(u)}')"></span>`).join("")}</div>${more ? `<span class="hmore">+${more}</span>` : ""}` };
 };
 class HolmMyMenuCard extends HTMLElement {
   setConfig(c) {
@@ -192,13 +204,13 @@ class HolmMyMenuCard extends HTMLElement {
   _slotHtml(day, slot, compact = false) {
     const s = this._s, entries = (s.plan[day] || {})[slot] || [];
     const recs = entries.filter((e) => e.type === "recipe").map((e) => s.recipes[e.recipe_id]).filter(Boolean);
-    const img = (recs.find((r) => r.image) || {}).image;
+    const bg = heroBg(recs);
     const lbl = recs.map((r) => r.name);
     const ings = entries.filter((e) => e.type === "ingredient").map((e) => s.ingredients[e.ingredient_id]).filter(Boolean);
     const txt = entries.filter((e) => e.type === "text").map((e) => e.text);
     const top = lbl.length || txt.length;
     return `<div class="slot ${entries.length ? "full" : ""}" draggable="${entries.length ? "true" : "false"}" data-act="slot" data-day="${day}" data-slot="${slot}">
-        <div class="shero ${img ? "img" : ""} ${!top && ings.length ? "mini" : ""}" ${img ? `style="--img:url('${esc(img)}')"` : ""}><span class="sl">${SLOT_LBL[slot]}</span>
+        <div class="shero ${bg.cls} ${!top && ings.length ? "mini" : ""}" ${bg.attr}>${bg.html}<span class="sl">${SLOT_LBL[slot]}</span>
           ${top ? `<div class="sx">${lbl.map((l) => `<b>${esc(l)}</b>`).join("")}${txt.map((l) => `<i>${esc(l)}</i>`).join("")}</div>` : entries.length ? "" : `<div class="sx add"><ha-icon icon="mdi:plus"></ha-icon></div>`}</div>
         ${ings.length ? `<div class="sxi">${ings.map((i) => `<span>${i.image ? `<em style="background-image:url('${esc(i.image)}')"></em>` : `<ha-icon icon="mdi:food-apple-outline"></ha-icon>`}${esc(i.name)}</span>`).join("")}</div>` : ""}</div>`;
   }
@@ -225,10 +237,10 @@ class HolmMyMenuCard extends HTMLElement {
     const recs = entries.filter((e) => e.type === "recipe" && s.recipes[e.recipe_id]);
     const ings = entries.filter((e) => e.type === "ingredient" && s.ingredients[e.ingredient_id]);
     const txts = entries.filter((e) => e.type === "text");
-    const img = (recs.map((e) => s.recipes[e.recipe_id]).find((r) => r.image) || {}).image;
+    const bg = heroBg(recs.map((e) => s.recipes[e.recipe_id]));
     const top = recs.length || txts.length;
     return `<div class="tslot ${small ? "sm" : ""}">
-      <div class="thero ${img ? "img" : ""} ${!top && ings.length ? "mini" : ""}" ${img ? `style="--img:url('${esc(img)}')"` : ""}>
+      <div class="thero ${bg.cls} ${!top && ings.length ? "mini" : ""}" ${bg.attr}>${bg.html}
         <span class="sl">${SLOT_LBL[sl]}</span>
         ${top ? `<div class="tents">
           ${recs.map((e) => { const r = s.recipes[e.recipe_id]; return `<button class="te" data-act="view-recipe" data-id="${r.id}" data-sv="${e.servings || ""}"><b>${esc(r.name)}</b>${small ? "" : `<small>${[r.total ? mins(r.total) : "", e.servings ? `${e.servings} pers.` : ""].filter(Boolean).join(" · ")}</small>`}</button>`; }).join("")}
@@ -1019,6 +1031,16 @@ input.search, .f { flex:1; min-width:0; box-sizing:border-box; padding:9px 12px;
 .thero { position:relative; flex:1; min-height:130px; padding:10px 12px; display:flex; flex-direction:column; justify-content:flex-end; gap:6px; box-sizing:border-box; }
 .thero.img { background-image:linear-gradient(180deg, rgba(0,0,0,.05) 20%, rgba(0,0,0,.78)), var(--img); background-size:cover; background-position:center; color:#fff; }
 .thero.mini { flex:none; min-height:38px; }
+.shero.multi, .thero.multi { background-image:none; overflow:hidden; isolation:isolate; }
+.hims { position:absolute; inset:0; z-index:-1; display:flex; }
+.hims span { flex:1; background-size:cover; background-position:center; }
+.hims.n2 span { position:absolute; top:0; bottom:0; width:56%; }
+.hims.n2 span:first-child { left:0; clip-path:polygon(0 0, 100% 0, 78.6% 100%, 0 100%); }
+.hims.n2 span:last-child { left:44%; clip-path:polygon(21.4% 0, 100% 0, 100% 100%, 0 100%); }
+.hims.n3 span + span { box-shadow:inset 2px 0 0 rgba(0,0,0,.35); }
+.hims::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,.12), rgba(0,0,0,.74)); }
+.thero .hims::after { background:linear-gradient(180deg, rgba(0,0,0,.05) 20%, rgba(0,0,0,.78)); }
+.hmore { position:absolute; top:6px; right:8px; padding:1px 7px; border-radius:999px; background:rgba(0,0,0,.55); color:#fff; font-size:11px; font-weight:700; }
 .tslot .sl { position:absolute; top:9px; left:10px; font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; padding:3px 8px; border-radius:999px; background:color-mix(in srgb, var(--ac) 85%, transparent); color:#fff; }
 .tents { display:flex; flex-direction:column; gap:4px; } .te { all:unset; cursor:pointer; display:flex; flex-direction:column; border-radius:10px; padding:4px 6px; margin:0 -6px; } .te.txt { cursor:default; }
 .te:not(.txt):hover { background:rgba(255,255,255,.12); } .te b { font-size:15px; font-weight:700; line-height:1.25; } .te small { font-size:12px; opacity:.85; }
