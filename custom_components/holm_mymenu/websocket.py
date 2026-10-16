@@ -440,6 +440,11 @@ async def ws_mail_info(hass, connection, msg):
 # Regroupement de présentation : les identifiants de courses originaux sont
 # conservés pour les cases à cocher et la synchronisation Telegram.
 def _shopping_groups(store: MenuStore) -> tuple[str, list]:
+    """Prépare le titre daté et les articles non cochés par rayon pour l’envoi.
+
+    Les groupes sont uniquement une présentation : les identifiants HOLM
+    d’origine restent disponibles pour les interactions avec Telegram.
+    """
     sh = store.data["shopping"]
     from .shopping_groups import shopping_groups
     items = [g for g in shopping_groups(sh.get("items", [])) if not g["checked"]]
@@ -461,7 +466,11 @@ def _shopping_groups(store: MenuStore) -> tuple[str, list]:
 @websocket_api.async_response
 # API ENVOI : une même période de courses pour Telegram, e-mail et HA.
 async def ws_shop_send(hass, connection, msg):
-    """Envoie la liste : un e-mail à toutes les adresses choisies, et une notification aux appareils choisis."""
+    """Envoie la liste via SMTP, notifications HA et/ou Telegram.
+
+    La période provient de la liste générée, et non du jour de l’envoi.
+    L’envoi SMTP précède les notifications ; les erreurs sont renvoyées au client.
+    """
     store = _store(hass)
     title, groups = _shopping_groups(store)
     if not groups:
@@ -562,6 +571,11 @@ async def ws_barcode(hass, connection, msg):
 })
 @websocket_api.async_response
 async def ws_calendar_export(hass, connection, msg):
+    """Déclenche un export manuel, sans synchronisation permanente.
+
+    « missing » ajoute les repas absents ; « sync » actualise les événements
+    HOLM et exige confirm_delete avant toute suppression prévue.
+    """
     try:
         result = await export_to_calendar(
             hass, _store(hass), msg["entity_id"], msg["start"], msg["end"], msg["prefix"][:80], msg["mode"], msg["confirm_delete"]
@@ -580,6 +594,10 @@ async def ws_calendar_export(hass, connection, msg):
 })
 @websocket_api.async_response
 async def ws_document_analyze(hass, connection, msg):
+    """Analyse une source PDF autorisée et renvoie un brouillon de recette.
+
+    Les documents scannés sans texte sélectionnable ne sont pas pris en charge.
+    """
     try:
         result = await analyze(
             hass, async_get_clientsession(hass),
@@ -602,6 +620,7 @@ _UPLOAD_TTL = 600
 
 
 def _uploads(hass):
+    """Récupère les transferts en RAM et purge ceux inactifs depuis dix minutes."""
     pending = hass.data[DOMAIN].setdefault("_document_uploads", {})
     now = time.monotonic()
     for key, item in list(pending.items()):
@@ -611,6 +630,7 @@ def _uploads(hass):
 
 
 def _owned_upload(hass, connection, upload_id):
+    """Refuse un transfert expiré ou créé par une autre connexion WebSocket."""
     pending = _uploads(hass)
     item = pending.get(upload_id)
     if item is None or item["connection"] is not connection:
@@ -625,6 +645,7 @@ def _owned_upload(hass, connection, upload_id):
 })
 @websocket_api.async_response
 async def ws_document_upload_start(hass, connection, msg):
+    """Ouvre un transfert PDF de 8 Mo maximum, limité à deux par connexion."""
     pending = _uploads(hass)
     if sum(item["connection"] is connection for item in pending.values()) >= 2:
         return _err(connection, msg, DocumentImportError("Deux transferts déjà en cours"))
@@ -645,6 +666,7 @@ async def ws_document_upload_start(hass, connection, msg):
 })
 @websocket_api.async_response
 async def ws_document_upload_chunk(hass, connection, msg):
+    """Accepte un fragment base64 de 128 Kio maximum dans l’ordre attendu."""
     try:
         item = _owned_upload(hass, connection, msg["upload_id"])
         if msg["index"] != len(item["parts"]):
@@ -671,6 +693,7 @@ async def ws_document_upload_chunk(hass, connection, msg):
 })
 @websocket_api.async_response
 async def ws_document_upload_finish(hass, connection, msg):
+    """Assemble les fragments, supprime le transfert puis analyse le PDF."""
     try:
         item = _owned_upload(hass, connection, msg["upload_id"])
         _uploads(hass).pop(msg["upload_id"], None)
@@ -695,6 +718,7 @@ async def ws_document_upload_finish(hass, connection, msg):
 })
 @websocket_api.async_response
 async def ws_document_upload_cancel(hass, connection, msg):
+    """Annule uniquement un transfert appartenant à la connexion courante."""
     pending = _uploads(hass)
     item = pending.get(msg["upload_id"])
     if item and item["connection"] is connection:
@@ -707,6 +731,7 @@ async def ws_document_upload_cancel(hass, connection, msg):
 @websocket_api.async_response
 # API RAPPELS : valider les destinations et conserver la configuration enregistrée.
 async def ws_reminder_save(hass, connection, msg):
+    """Valide et enregistre un rappel ; retourne son ID et ses paramètres."""
     try:
         result = hass.data[DOMAIN]["reminders"].save(msg["reminder"], msg.get("reminder_id"))
         connection.send_result(msg["id"], result)
@@ -716,6 +741,7 @@ async def ws_reminder_save(hass, connection, msg):
 @websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/reminder/delete", vol.Required("reminder_id"): str})
 @websocket_api.async_response
 async def ws_reminder_delete(hass, connection, msg):
+    """Supprime un rappel identifié, ou retourne une erreur s’il est absent."""
     try:
         hass.data[DOMAIN]["reminders"].delete(msg["reminder_id"])
         connection.send_result(msg["id"], {})
@@ -725,6 +751,7 @@ async def ws_reminder_delete(hass, connection, msg):
 @websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/reminder/test", vol.Required("reminder_id"): str})
 @websocket_api.async_response
 async def ws_reminder_test(hass, connection, msg):
+    """Teste l’envoi immédiatement, sans consommer son prochain déclenchement."""
     manager = hass.data[DOMAIN]["reminders"]
     reminder = next((r for r in manager.store.data["reminders"] if r["id"] == msg["reminder_id"]), None)
     if reminder is None:
