@@ -49,6 +49,7 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
   - **Complet** pour tout gérer ;
   - **Menu du jour** et **Semaine** en simple consultation, idéales pour une tablette murale. Un toucher sur un plat ou un produit l'affiche en grand ;
   - **Statistiques**.
+- 📆 **Export du planning vers un calendrier Home Assistant**, local ou distant (Google Calendar, CalDAV) : ajout des repas, mise à jour des événements HOLM existants et synchronisation sans doublons.
 - 🔔 **Rappels programmables** : courses, menus, préparation des recettes ou message personnalisé ; envoi ponctuel, quotidien ou hebdomadaire par notification Home Assistant, Telegram ou e-mail.
 - 📄 **Import de recettes depuis un PDF texte** : lecture locale avec `pypdf`, sans service OCR ni serveur externe. Les PDF scannés sans texte sélectionnable ne sont pas pris en charge.
 - 🧩 **Capteurs** pour vos automatisations : menu du midi, menu du soir et prochain repas.
@@ -63,6 +64,7 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
 - [Recettes](#recettes)
 - [Ingrédients et Open Food Facts](#ingrédients-et-open-food-facts)
 - [Liste de courses](#liste-de-courses)
+- [Export vers un calendrier](#export-vers-un-calendrier)
 - [Rappels et notifications](#rappels-et-notifications)
 - [Statistiques](#statistiques)
 - [Capteurs](#capteurs)
@@ -220,6 +222,29 @@ Dans la fiche d'une recette, vous pouvez :
 
 ---
 
+## Export vers un calendrier
+
+Le planning HOLM peut être **exporté manuellement** vers un calendrier déjà configuré dans Home Assistant : un calendrier local, **Google Calendar** ou un calendrier distant **CalDAV**. HOLM utilise l'entité `calendar.*` fournie par l'intégration de calendrier ; il ne demande pas de compte Google ni d'identifiants CalDAV supplémentaires.
+
+### Préparer le calendrier
+
+1. Ajoutez l'intégration correspondant à votre calendrier : [**Local Calendar**](https://www.home-assistant.io/integrations/local_calendar/), [**Google Calendar**](https://www.home-assistant.io/integrations/google/) ou [**CalDAV**](https://www.home-assistant.io/integrations/caldav/).
+2. Vérifiez que le calendrier cible apparaît comme entité `calendar.*` dans Home Assistant et qu'il autorise la création d'événements.
+3. Dans HOLM My Menu, ouvrez le planning et la fonction d'**export calendrier**. Choisissez le calendrier de destination, la période et, si souhaité, un préfixe pour les titres.
+
+### Fonctionnement de l'export
+
+- HOLM crée **un événement par repas** (midi ou soir) contenant les recettes prévues et, lorsqu'elles existent, leurs URL d'origine.
+- Horaires actuels : **12 h–13 h** pour le midi et **19 h–20 h** pour le soir, dans le fuseau horaire de Home Assistant.
+- La période sélectionnée peut couvrir **32 jours maximum**.
+- **Ajouter les événements manquants** : conserve les événements HOLM déjà présents et n'ajoute que ceux qui manquent.
+- **Synchroniser** : crée les événements absents, met à jour ceux qui ont changé et peut supprimer les événements HOLM devenus inutiles, **uniquement après confirmation**.
+- Les événements créés portent un identifiant HOLM dans leur description : la synchronisation n'altère pas les autres rendez-vous du calendrier.
+
+> La mise à jour et la suppression dépendent des fonctionnalités prises en charge par l'intégration du calendrier choisi. Si elles sont indisponibles, HOLM signale l'impossibilité de synchroniser au lieu de recréer les événements en double. L'export est **déclenché par l'utilisateur**, ce n'est pas une synchronisation automatique permanente ni une importation bidirectionnelle des rendez-vous.
+
+---
+
 ## Rappels et notifications
 
 HOLM permet de programmer des rappels pour **faire les courses**, **consulter les menus**, **préparer une recette** ou envoyer un **message personnalisé** (par exemple « Acheter les pommes de terre à la ferme »).
@@ -298,6 +323,9 @@ Open Food Facts est un service gratuit, parfois saturé. Réessayez un peu plus 
 
 **Une recette Marmiton ne s'importe pas.**
 Marmiton peut changer sa page. Essayez l'import par **Lien** ; sinon, ouvrez une issue avec l'adresse de la recette.
+
+**L'export calendrier refuse une mise à jour ou une suppression.**
+Le calendrier cible doit permettre l'opération demandée. Essayez le mode d'ajout des événements manquants ou vérifiez les droits du calendrier dans Home Assistant. La suppression d'anciens événements HOLM exige une confirmation explicite.
 
 **Un PDF scanné ne s'importe pas.**
 HOLM lit les PDF qui contiennent du texte exploitable. L'OCR a été retiré : convertissez d'abord le scan en PDF avec texte sélectionnable.
