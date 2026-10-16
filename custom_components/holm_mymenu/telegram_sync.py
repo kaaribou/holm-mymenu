@@ -1,6 +1,6 @@
-"""Optional Telegram shopping bridge for HOLM My Menu.
+"""Synchronisation facultative des courses avec Telegram via Home Assistant.
 
-Uses Home Assistant's telegram_bot integration; no bot token is stored here.
+Utilise l’intégration telegram_bot existante : aucun jeton de bot n’est stocké ici.
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def register_shopping_services(hass, store):
-    """Generic API usable without Telegram, for automations and voice assistants."""
+    """Expose la liste et le cochage via des services HA, même sans Telegram."""
     async def get_list(call):
         return {"range": store.data["shopping"].get("range"),
                 "items": [dict(item) for item in store.data["shopping"].get("items", [])]}
@@ -48,16 +48,20 @@ def register_shopping_services(hass, store):
 # TELEGRAM : un flux partagé par destination ; les boutons agissent sur les IDs originaux.
 # Les messages de rappel restent distincts de la liste interactive.
 class TelegramShoppingSync:
-    """Tracks a shared list and Telegram message IDs for each destination."""
+    """Conserve les messages interactifs par destination (chat, sujet facultatif).
+
+    Chaque destination garde ses identifiants de messages dans le stockage HA.
+    Les rappels Telegram sont distincts et ne remplacent jamais cette liste.
+    """
 
     def __init__(self, hass, store):
         self.hass, self.store = hass, store
-        self.destinations = {}  # (chat, thread) -> [message_ids]
+        self.destinations = {}  # (chat, sujet) -> identifiants des pages envoyées
         self._unsubs = []
         self._task = None
         self._lock = asyncio.Lock()
         self._storage = Store(hass, 1, "holm_mymenu_telegram_destinations")
-        self._sent_content = {}  # (destination, page) -> (text, keyboard)
+        self._sent_content = {}  # (destination, page) -> (texte, boutons)
 
     async def async_start(self):
         saved = await self._storage.async_load() or {}
@@ -163,7 +167,10 @@ class TelegramShoppingSync:
         return None, unit, display
 
     def _grouped_items(self):
-        # Group presentation only: HOLM shopping items remain individually editable.
+        """Regroupe uniquement l’affichage ; chaque article HOLM garde son ID.
+
+        Le bouton Telegram d’un groupe agit sur tous les articles sous-jacents.
+        """
         items = []
         for item in self.store.data["shopping"].get("items", []):
             cloned = dict(item)
@@ -215,11 +222,11 @@ class TelegramShoppingSync:
         return label[:1].upper() + label[1:]
 
     def _pages(self):
-        """Telegram shopping list, in the same aisle order as HOLM and e-mail.
+        """Construit les pages Telegram dans l’ordre des rayons HOLM.
 
-        A grouped button toggles all underlying HOLM shopping entries. Keep
-        pagination below Telegram's text limit and include category headers
-        again when a page splits in the middle of a category.
+        Un bouton par groupe permet de cocher toutes ses entrées originales.
+        La pagination limite chaque message à 3 800 caractères et 70 boutons ;
+        le titre, la période et les en-têtes de rayon sont répétés si nécessaire.
         """
         groups = self._grouped_items()
         language = self._language()
@@ -261,7 +268,7 @@ class TelegramShoppingSync:
                     ingredient = "<s>" + ingredient + "</s>"
                 line = ("✓ " if checked else "▫ ") + ingredient + (" <i>· " + html.escape(qty) + "</i>" if qty else "")
                 candidate = heading + "\n" + line
-                # Keep some room for escaped markup and Telegram limits.
+                # Garder une marge pour les balises HTML et la limite Telegram.
                 if len("\n".join(lines)) + len(candidate) + 20 > 3800 and buttons:
                     break
                 if len(buttons) >= 70:
@@ -270,21 +277,21 @@ class TelegramShoppingSync:
                     lines.append(heading)
                     current_aisle = aisle
                 lines.append(line)
-                # HA telegram_bot's inline_keyboard syntax uses commas to
-                # separate buttons; sanitize the visible label only.
+                # La syntaxe inline_keyboard de HA sépare les boutons par des
+                # virgules : nettoyer seulement le libellé visible, pas l’ID.
                 aisle_icon = next((a.get("icon", "🟣") for a in self.store.data.get("custom_aisles", []) if a["id"] == aisle), self._aisle_icon(aisle_names.get(aisle, aisle)))
                 label = aisle_icon + (" ☑ " if checked else " ☐ ") + group["name"]
                 if qty:
                     label += " — " + qty
                 label = label.replace(",", "·").replace(":", " - ").replace("\n", " ")
-                # Keep the label legible without exceeding Telegram button limits.
+                # Tronquer le libellé pour respecter les limites des boutons Telegram.
                 if len(label) > 58:
                     label = label[:57] + "…"
                 buttons.append(f"{label}:/holm:{group['items'][0]['id']}")
                 position += 1
             if not buttons:
                 lines.append("(empty list)" if language == "en" else "(liste vide)")
-            # One interactive button per row for easier tapping on mobile.
+            # Un bouton par ligne pour faciliter le cochage sur mobile.
             keyboard = list(buttons)
             pages.append(("\n".join(lines), keyboard))
         return pages
@@ -304,6 +311,7 @@ class TelegramShoppingSync:
         return message_id
 
     async def publish(self, chat_id, thread_id=None):
+        """Publie ou actualise la liste dans un chat et, si fourni, son sujet."""
         key = (int(chat_id), int(thread_id) if thread_id is not None else None)
         async with self._lock:
             self.destinations.setdefault(key, [])
@@ -311,10 +319,16 @@ class TelegramShoppingSync:
             self._save()
 
     async def _refresh_one(self, key, force_new=False):
+        """Modifie les pages existantes ou crée/remplace les messages absents.
+
+        Le sujet Telegram n’est utilisé qu’à la création. Les UID des messages
+        permettent les mises à jour, sans renvoyer toute la liste à chaque clic.
+        Les pages devenues inutiles sont supprimées si Telegram l’autorise.
+        """
         chat_id, thread_id = key
         pages = self._pages()
         ids = self.destinations.get(key, [])
-        # Telegram message IDs are obtained from the send_message service response.
+        # Les identifiants des messages proviennent de la réponse send_message.
         for index, (body, keyboard) in enumerate(pages):
             data = {"chat_id": chat_id, "message": body, "inline_keyboard": keyboard,
                     "parse_mode": "html"}
@@ -337,8 +351,8 @@ class TelegramShoppingSync:
                         self._sent_content[content_key] = content
                         continue
                     if "message to edit not found" in detail or "message can't be edited" in detail:
-                        # The message may have been deleted, or may belong to a
-                        # different bot. Replace the stale ID with a new message.
+                        # Message supprimé ou issu d’un autre bot : remplacer
+                        # l’identifiant périmé par celui d’un nouveau message.
                         _LOGGER.warning(
                             "Telegram message %s unavailable in chat %s; sending a replacement",
                             ids[index], chat_id,
@@ -350,14 +364,14 @@ class TelegramShoppingSync:
                         self._save()
                         continue
                     _LOGGER.exception("Telegram message update failed for chat %s", chat_id)
-                    # Keep the ID and retry only on the next real list update.
+                    # Conserver l’ID ; réessayer au prochain changement de liste.
                     continue
             response = await self._call("send_message", data)
             message_id = self._extract_message_id(response, chat_id)
             ids.append(message_id)
             self._sent_content[(key, index)] = (body, tuple(keyboard))
             self._save()
-        # When items shrink, remove surplus old messages if possible.
+        # Supprimer les anciennes pages excédentaires quand la liste raccourcit.
         if not force_new and len(ids) > len(pages):
             for old_id in ids[len(pages):]:
                 try:
@@ -371,6 +385,11 @@ class TelegramShoppingSync:
 
     @callback
     def _on_callback(self, event):
+        """Accepte uniquement les clics de messages HOLM connus.
+
+        Le bouton contient l’ID d’un article ; si celui-ci représente un groupe,
+        toutes ses entrées sont cochées/décochées ensemble puis synchronisées.
+        """
         data = event.data
         payload = str(data.get("data") or "")
         if not payload.startswith("/holm:"):
@@ -390,7 +409,7 @@ class TelegramShoppingSync:
         item = next((i for i in self.store.data["shopping"].get("items", []) if i["id"] == item_id), None)
         if item is None:
             return
-        # A grouped Telegram button represents all matching HOLM entries.
+        # Le bouton d’un groupe représente toutes les entrées HOLM associées.
         group = next((g for g in self._grouped_items()
                       if any(i["id"] == item_id for i in g["items"])), None)
         if group is None:
@@ -399,7 +418,7 @@ class TelegramShoppingSync:
         for entry in group["items"]:
             self.store.shopping_toggle(entry["id"], new_checked)
         self.store.changed("shopping")
-        # Answer the callback so Telegram stops showing the spinner.
+        # Acquitter le clic pour arrêter l’indicateur de chargement Telegram.
         callback_id = data.get("id")
         if callback_id and self.hass.services.has_service("telegram_bot", "answer_callback_query"):
             self.hass.async_create_task(self._ack_callback(callback_id))
@@ -414,6 +433,7 @@ class TelegramShoppingSync:
 
     @callback
     def _on_updated(self, what):
+        """Planifie une actualisation après une modification de la liste HOLM."""
         if what != "shopping" or not self.destinations:
             return
         if self._task and not self._task.done():
@@ -421,6 +441,7 @@ class TelegramShoppingSync:
         self._task = self.hass.async_create_task(self._refresh_debounced())
 
     async def _refresh_debounced(self):
+        """Regroupe les changements sur 0,6 s pour limiter les appels Telegram."""
         try:
             await asyncio.sleep(0.6)
             async with self._lock:
