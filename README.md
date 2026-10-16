@@ -107,6 +107,7 @@ Pour envoyer la liste de courses ou les rappels par e-mail, configurez d'abord l
 3. Dans l'onglet **Courses** de HOLM, ouvrez l'envoi de la liste, sélectionnez la destination Telegram (identifiant du chat et, pour un sujet de supergroupe, identifiant du fil), puis publiez.
 4. Le message affiche les catégories et les quantités ; ses boutons permettent de cocher ou décocher les articles. Les changements sont répercutés dans la liste HOLM et les messages publiés sont mis à jour.
 
+### Notifications natives Home Assistant 
 Pour les notifications sur téléphone, installez l'[**application compagnon Home Assistant**](https://www.home-assistant.io/integrations/mobile_app/) et activez les notifications de l'appareil. Vous pourrez ensuite sélectionner les entités de notification disponibles.
 
 Tout est stocké localement dans Home Assistant (`.storage/holm_mymenu`), et les photos dans `www/holm_mymenu/`. Ce dossier est créé par l'intégration et ses photos sont servies par elle-même : rien à préparer, et elles s'affichent même si le dossier `www` n'existait pas encore.
