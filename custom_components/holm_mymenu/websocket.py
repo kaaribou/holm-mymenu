@@ -445,8 +445,10 @@ def _shopping_groups(store: MenuStore) -> tuple[str, list]:
     items = [g for g in shopping_groups(sh.get("items", [])) if not g["checked"]]
     groups = [(label, sorted([i for i in items if i["aisle"] == key], key=lambda x: x["name"].lower())) for key, label in store.aisles()]
     groups = [g for g in groups if g[1]]
-    # La période vient de la génération des courses, pas de la date d'envoi.
+    # Initialiser le titre avant d’ajouter éventuellement la période des courses.
     # Le même titre est utilisé dans le sujet e-mail et la notification HA.
+    title = "Liste de courses"
+    # La période vient de la génération des courses, pas de la date d’envoi.
     period = shopping_period(sh)
     if period:
         title += f" — {period}"
