@@ -1,0 +1,17 @@
+get_shopping_list:
+  name: Récupérer la liste de courses
+  description: Renvoie les articles et leurs identifiants, quantités et états.
+set_shopping_item:
+  name: Cocher ou décocher un article
+  description: Modifie un article et déclenche la synchronisation de la liste.
+  fields:
+    item_id:
+      name: Identifiant de l'article
+      required: true
+      selector:
+        text:
+    checked:
+      name: Acheté
+      required: true
+      selector:
+        boolean:

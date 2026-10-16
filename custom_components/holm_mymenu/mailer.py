@@ -72,6 +72,7 @@ def build_bodies(title: str, groups: list[tuple[str, list[dict]]], footer: str) 
     return text, body
 
 
+# E-MAIL : réutiliser les réglages SMTP de HA ; aucune dépendance à un service IA.
 def send_mail(settings: dict, recipients: list[str], subject: str, text: str, body_html: str) -> None:
     """Envoi bloquant (à lancer dans un exécuteur)."""
     msg = EmailMessage()

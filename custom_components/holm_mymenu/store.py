@@ -32,7 +32,7 @@ class MenuStore:
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self.servings = servings
         self.data: dict = {"ingredients": {}, "recipes": {}, "plan": {}, "shopping": {"items": [], "range": None},
-                           "contacts": [], "history": {}}
+                           "contacts": [], "history": {}, "custom_aisles": [], "reminders": []}
         self._img_dir = hass.config.path("www", "holm_mymenu")
 
     async def async_load(self) -> None:
@@ -46,6 +46,8 @@ class MenuStore:
             self._history_from_plan()
             dirty = True
         self._clean_plan()
+        # Répare les rayons automatiques historiques, sans modifier les choix manuels.
+        dirty = self.repair_auto_aisles() or dirty
         if self._repair_units() or dirty:
             self.changed("all")
 
@@ -80,6 +82,77 @@ class MenuStore:
             h["last"] = day
         if day < h.get("first", day):
             h["first"] = day
+
+    # Rayons ajoutés depuis la liste ou une fiche ingrédient : persistants
+    # dans le Store HA, distincts des rayons intégrés à HOLM.
+    def aisles(self) -> list[tuple[str, str]]:
+        # Divers remains last; custom categories survive HA restarts.
+        return AISLES[:-1] + [(a["id"], a["name"]) for a in self.data.get("custom_aisles", [])] + AISLES[-1:]
+
+    # RAYONS PERSONNALISÉS : persistés avec les données HOLM ; ne jamais modifier les rayons standards.
+    def aisle_create(self, name: str, icon: str = "🟣") -> dict:
+        name = " ".join(name.strip().split())
+        if not 1 <= len(name) <= 45:
+            raise ValueError("Nom de catégorie invalide (1 à 45 caractères)")
+        if any(label.casefold() == name.casefold() for _, label in self.aisles()):
+            raise ValueError("Cette catégorie existe déjà")
+        a = {"id": "custom_" + _id(), "name": name, "icon": icon[:8] or "🟣"}
+        self.data.setdefault("custom_aisles", []).append(a)
+        return a
+
+    def aisle_update(self, aid: str, name: str | None = None, icon: str | None = None) -> None:
+        a = next((x for x in self.data.get("custom_aisles", []) if x["id"] == aid), None)
+        if a is None:
+            raise ValueError("Catégorie personnalisée introuvable")
+        if name is not None:
+            name = " ".join(name.strip().split())
+            if not 1 <= len(name) <= 45 or any(k != aid and v.casefold() == name.casefold() for k, v in self.aisles()):
+                raise ValueError("Nom de catégorie invalide ou déjà utilisé")
+            a["name"] = name
+        if icon is not None:
+            a["icon"] = icon[:8] or "🟣"
+
+    def aisle_delete(self, aid: str) -> None:
+        if not any(x["id"] == aid for x in self.data.get("custom_aisles", [])):
+            raise ValueError("Catégorie personnalisée introuvable")
+        self.data["custom_aisles"] = [x for x in self.data["custom_aisles"] if x["id"] != aid]
+        for ing in self.data["ingredients"].values():
+            if ing.get("aisle") == aid:
+                ing["aisle"] = "autre"
+                ing["aisle_manual"] = True
+        for it in self.data["shopping"].get("items", []):
+            if it.get("aisle") == aid:
+                it["aisle"] = "autre"
+
+    def shopping_update(self, ids: list[str], changes: dict) -> None:
+        allowed = {"name", "display", "aisle", "checked"}
+        if not changes or set(changes) - allowed:
+            raise ValueError("Modification non autorisée")
+        if "aisle" in changes and changes["aisle"] not in dict(self.aisles()):
+            raise ValueError("Rayon inconnu")
+        if "name" in changes and not str(changes["name"]).strip():
+            raise ValueError("Le nom ne peut pas être vide")
+        for it in self.data["shopping"].get("items", []):
+            if it["id"] in ids:
+                for k, v in changes.items():
+                    it[k] = v.strip() if isinstance(v, str) else v
+                if "aisle" in changes:
+                    it["aisle_manual"] = True
+
+    # Réautoriser un ingrédient exclu sans modifier la recette d'origine.
+    # keys=None réautorise tout ; une liste de clés restaure individuellement.
+    # EXCLUSIONS : restauration ciblée ou globale des ingrédients écartés des courses.
+    def shopping_restore(self, keys: list[str] | None = None) -> None:
+        sh = self.data["shopping"]
+        if keys is None:
+            sh["excluded"] = []
+            sh["excluded_details"] = {}
+            return
+        removed = set(keys)
+        sh["excluded"] = [key for key in sh.get("excluded", []) if key not in removed]
+        details = sh.setdefault("excluded_details", {})
+        for key in removed:
+            details.pop(key, None)
 
     # ---------------- carnet d'adresses ----------------
     def save_contact(self, name: str, email: str, cid: str | None = None) -> dict:
@@ -142,6 +215,8 @@ class MenuStore:
     def changed(self, what: str = "all") -> None:
         self._store.async_delay_save(lambda: self.data, 1.0)
         async_dispatcher_send(self.hass, SIGNAL_UPDATED, what)
+        if what == "shopping":
+            self.hass.bus.async_fire("holm_mymenu_shopping_changed", {"items": len(self.data["shopping"].get("items", []))})
 
     def _clean_plan(self) -> None:
         """Garde 8 semaines d'historique."""
@@ -201,7 +276,7 @@ class MenuStore:
             ing["key"] = ingredient_key(ing["name"])
             if old and old != ing["key"] and old not in ing["aliases"]:
                 ing["aliases"].append(old)
-        if "aisle" in changes and changes["aisle"] not in _AISLE_IDS:
+        if "aisle" in changes and changes["aisle"] not in dict(self.aisles()):
             ing["aisle"] = "autre"
         return ing
 
@@ -372,7 +447,46 @@ class MenuStore:
                     break
         return {"label": " · ".join(self.entry_label(e) for e in entries), "entries": entries, "image": img}
 
+    # CLASSEMENT : corriger les anciennes catégories automatiques sans écraser les choix manuels.
+    def repair_auto_aisles(self) -> bool:
+        """Corrige les classements automatiques historiques ciblés.
+
+        Ne modifie jamais un rayon défini manuellement, ni les catégories
+        personnalisées. Ne fusionne pas les articles stockés : uniquement
+        l'affichage des groupes est fusionné dans shopping_groups.py.
+        """
+        from .shopping_groups import normalized_name
+
+        changed = False
+        by_id = self.data["ingredients"]
+        canonical_aisles = {"oeufs": "cremerie", "lardons": "boucherie", "beurre": "cremerie"}
+
+        def desired(name):
+            label, key = normalized_name(name)
+            if key in canonical_aisles:
+                return canonical_aisles[key]
+            if ingredient_key(name).startswith("lave glace"):
+                return "maison"
+            return None
+
+        for ing in by_id.values():
+            target = desired(ing.get("name", ""))
+            if target and not ing.get("aisle_manual") and ing.get("aisle") != target:
+                ing["aisle"] = target
+                changed = True
+        for item in self.data["shopping"].get("items", []):
+            ing = by_id.get(item.get("ingredient_id"))
+            target = desired(item.get("name", ""))
+            if target and not item.get("aisle_manual") and not (ing and ing.get("aisle_manual")) and item.get("aisle") != target:
+                item["aisle"] = target
+                changed = True
+        return changed
+
     # ---------------- liste de courses ----------------
+    # La plage start/end est conservée avec la liste : notifications et
+    # rappels peuvent ensuite afficher la semaine exacte même plusieurs jours
+    # après sa génération. Les exclusions restent liées à cette plage.
+    # GÉNÉRATION : préserver les articles manuels et les exclusions de la période en cours.
     def generate_shopping(self, start: str, end: str, keep_manual: bool = True) -> None:
         acc: dict[tuple, dict] = {}
 
@@ -408,15 +522,19 @@ class MenuStore:
                             add(ing["id"], ing["name"], e.get("qty"), e.get("unit", ""), None)
             d += timedelta(days=1)
         old = self.data["shopping"].get("items", [])
+        previous_range = self.data["shopping"].get("range") or {}
+        same_range = previous_range.get("start") == start and previous_range.get("end") == end
+        excluded = set(self.data["shopping"].get("excluded", [])) if same_range else set()
+        excluded_details = dict(self.data["shopping"].get("excluded_details", {})) if same_range else {}
         checked = {(i.get("ingredient_id") or ingredient_key(i["name"]), i.get("unit")) for i in old if i.get("checked") and not i.get("manual")}
-        items = list(acc.values())
+        items = [it for it in acc.values() if self._shopping_key(it) not in excluded]
         for it in items:
             if (it["ingredient_id"] or ingredient_key(it["name"]), it["unit"]) in checked:
                 it["checked"] = True
             it["display"] = pretty_qty(it["qty"], it["unit"])
         if keep_manual:
             items += [i for i in old if i.get("manual")]
-        self.data["shopping"] = {"items": items, "range": {"start": start, "end": end}, "generated": time.time()}
+        self.data["shopping"] = {"items": items, "range": {"start": start, "end": end}, "generated": time.time(), "excluded": sorted(excluded), "excluded_details": excluded_details}
 
     def shopping_add(self, name: str, qty: str = "") -> dict:
         ing = self.find_ingredient(name)
@@ -431,10 +549,31 @@ class MenuStore:
             if it["id"] == item_id:
                 it["checked"] = (not it["checked"]) if checked is None else bool(checked)
 
+    @staticmethod
+    def _shopping_key(it: dict) -> str:
+        return str(it.get("ingredient_id") or ingredient_key(it.get("name", ""))) + "|" + str(it.get("unit") or "")
+
+    # Supprimer un groupe visuel retire ses lignes de courses sous-jacentes,
+    # sans supprimer ni modifier les ingrédients des recettes.
+    # SUPPRESSION GROUPÉE : conserver les recettes et mémoriser les exclusions des lignes sources.
+    def shopping_remove_group(self, ids: list[str]) -> None:
+        idset = set(ids)
+        sh = self.data["shopping"]
+        excluded = set(sh.get("excluded", []))
+        details = sh.setdefault("excluded_details", {})
+        for it in sh.get("items", []):
+            if it["id"] in idset and not it.get("manual"):
+                key = self._shopping_key(it)
+                excluded.add(key)
+                details[key] = {"name": it.get("name", "Article"), "display": it.get("display", ""), "aisle": it.get("aisle", "autre")}
+        sh["excluded"] = sorted(excluded)
+        sh["items"] = [it for it in sh.get("items", []) if it["id"] not in idset]
+
     def shopping_remove(self, item_id: str | None = None, checked_only: bool = False) -> None:
         items = self.data["shopping"].get("items", [])
         if item_id:
-            items = [i for i in items if i["id"] != item_id]
+            self.shopping_remove_group([item_id])
+            return
         elif checked_only:
             items = [i for i in items if not i.get("checked")]
         else:
@@ -501,10 +640,13 @@ class MenuStore:
 
     # ---------------- état pour la carte ----------------
     def snapshot(self) -> dict:
+        from .shopping_groups import shopping_groups
+        if self.repair_auto_aisles():
+            self.changed("shopping")
         return {"ingredients": self.data["ingredients"], "recipes": self.data["recipes"], "plan": self.data["plan"],
-                "shopping": self.data["shopping"], "contacts": self.data["contacts"],
+                "shopping": {**self.data["shopping"], "groups": shopping_groups(self.data["shopping"].get("items", []))}, "contacts": self.data["contacts"],
                 "history": {k: v.get("count", 0) for k, v in self.data["history"].items()},
-                "aisles": AISLES, "slots": list(SLOTS), "servings": self.servings}
+                "reminders": self.data.get("reminders", []), "aisles": self.aisles(), "custom_aisles": self.data.get("custom_aisles", []), "slots": list(SLOTS), "servings": self.servings}
 
 
 async def gather_limited(coros, limit: int = 4):

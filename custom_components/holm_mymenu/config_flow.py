@@ -35,4 +35,6 @@ class HolmMyMenuOptions(config_entries.OptionsFlow):
             vol.Required(CONF_SERVINGS, default=o.get(CONF_SERVINGS, 4)): vol.All(int, vol.Range(min=1, max=20)),
             vol.Optional(CONF_MEALIE_URL, description={"suggested_value": o.get(CONF_MEALIE_URL, "")}): str,
             vol.Optional(CONF_MEALIE_TOKEN, description={"suggested_value": o.get(CONF_MEALIE_TOKEN, "")}): str,
+            vol.Optional("import_ocr_url", description={"suggested_value": o.get("import_ocr_url", "")}): str,
+            vol.Optional("import_ocr_token", description={"suggested_value": o.get("import_ocr_token", "")}): str,
         }))

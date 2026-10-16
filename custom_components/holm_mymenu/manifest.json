@@ -17,7 +17,9 @@
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/kaaribou/holm-mymenu/issues",
-  "requirements": [],
+  "requirements": [
+    "pypdf==5.9.0"
+  ],
   "single_config_entry": true,
-  "version": "1.1.5"
+  "version": "1.1.5-courses-final"
 }

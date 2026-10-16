@@ -1,6 +1,6 @@
 """Constantes de HOLM My Menu."""
 DOMAIN = "holm_mymenu"
-VERSION = "1.1.5"
+VERSION = "1.1.6-reminders-shopping"
 STORAGE_KEY = "holm_mymenu"
 STORAGE_VERSION = 1
 SLOTS = ("midi", "soir")

@@ -12,8 +12,10 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from .const import CARD_URL, CONF_SERVINGS, DOMAIN, MEDIA_PATH, STATIC_PATH, VERSION
+from .reminders import ReminderManager
 from .store import MenuStore
 from .websocket import async_register
+from .telegram_sync import TelegramShoppingSync, register_shopping_services
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.SENSOR]
@@ -22,10 +24,18 @@ PLATFORMS = [Platform.SENSOR]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     store = MenuStore(hass, int(entry.options.get(CONF_SERVINGS, 4)))
     await store.async_load()
+    store.data.setdefault("reminders", [])
     first = DOMAIN not in hass.data
     hass.data[DOMAIN] = {"store": store, "options": dict(entry.options)}
     if first:
         async_register(hass)
+        register_shopping_services(hass, store)
+        reminders = ReminderManager(hass, store)
+        hass.data[DOMAIN]["reminders"] = reminders
+        await reminders.async_start()
+        telegram_sync = TelegramShoppingSync(hass, store)
+        hass.data[DOMAIN]["telegram_sync"] = telegram_sync
+        await telegram_sync.async_start()
         # dossier des photos : créé ici et servi par l'intégration elle-même, pour fonctionner
         # même si config/www n'existait pas au démarrage de Home Assistant (/local inactif)
         media = hass.config.path("www", "holm_mymenu")
@@ -87,4 +97,12 @@ async def _options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded and DOMAIN in hass.data:
+        reminders = hass.data[DOMAIN].get("reminders")
+        if reminders:
+            await reminders.async_stop()
+        sync = hass.data[DOMAIN].get("telegram_sync")
+        if sync:
+            await sync.async_stop()
+    return unloaded

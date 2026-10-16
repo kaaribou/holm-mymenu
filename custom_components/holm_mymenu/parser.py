@@ -98,7 +98,7 @@ def _singular(word: str) -> str:
 
 def ingredient_key(name: str) -> str:
     """Clé de rapprochement : minuscules, sans accents, au singulier, sans articles."""
-    s = strip_accents(name.lower())
+    s = strip_accents(name.lower().replace("œ", "oe").replace("æ", "ae"))
     s = re.sub(r"\(.*?\)", " ", s)
     s = re.sub(r"[^a-z0-9 ]+", " ", s)
     words = [w for w in s.split() if w not in ("de", "d", "du", "des", "la", "le", "les", "l", "un", "une", "a", "au", "aux", "en", "et")]
@@ -210,7 +210,30 @@ _OFF_CATS = [("en:frozen-foods", "surgeles"), ("en:beverages", "boissons"), ("en
              ("en:cereals-and-potatoes", "epicerie"), ("en:pastas", "epicerie"), ("en:canned-foods", "epicerie")]
 
 
+# Explicit whole-expression overrides must precede generic food keywords.
+_NONFOOD_PHRASES = (
+    "lave glace", "lave glaces", "liquide lave glace", "liquide lave glaces",
+    "produit lave glace", "produit lave glaces",
+)
+
+# CATÉGORISATION : privilégier les expressions spécifiques aux simples mots clés.
+# Les corrections automatiques ne doivent pas écraser une catégorie choisie par l’utilisateur.
 def guess_aisle(name: str, off_categories: list[str] | None = None) -> str:
+    """Propose un rayon automatique, sans écraser les choix manuels.
+
+    Les expressions spécifiques (dont « lave-glace ») doivent primer sur les
+    mots isolés comme « glace », qui pourraient fausser le rayon proposé.
+    """
+    key = ingredient_key(name)
+    # Les œufs, y compris les graphies « oeuf/œufs », appartiennent à la crèmerie.
+    if key in ("oeuf", "oeuf par personne"):
+        return "cremerie"
+    if key in ("lardon", "lardon nature ou fume", "lardon fume", "lardon nature"):
+        return "boucherie"
+    if key in ("beurre", "beurre doux"):
+        return "cremerie"
+    if any(key == phrase or key.startswith(phrase + " ") for phrase in _NONFOOD_PHRASES):
+        return "maison"
     for tag, aisle in _OFF_CATS:
         if off_categories and tag in off_categories:
             return aisle
