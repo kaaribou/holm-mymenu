@@ -1,4 +1,4 @@
-"""Export explicite du planning HOLM vers un calendrier Home Assistant."""
+"""Export manuel du planning HOLM vers un calendrier Home Assistant, local ou distant."""
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
@@ -16,7 +16,11 @@ SLOT_HOURS = {"midi": (12, 13), "soir": (19, 20)}
 
 
 def calendar_events(store, start: str, end: str, prefix: str, tz_name: str):
-    """Un événement par créneau et par jour, quel que soit le nombre de recettes."""
+    """Prépare un événement par repas (midi/soir), même si plusieurs recettes sont prévues.
+
+    Les dates et heures utilisent le fuseau horaire configuré dans Home Assistant.
+    Cette étape prépare uniquement les données : aucun calendrier n’est modifié.
+    """
     first, last = date.fromisoformat(start), date.fromisoformat(end)
     if last < first or (last - first).days > 31:
         raise ValueError("Sélectionnez une période de 1 à 32 jours maximum")
@@ -53,7 +57,7 @@ def calendar_events(store, start: str, end: str, prefix: str, tz_name: str):
     return result
 
 
-# Marker independent of recipe title/prefix; only events carrying it are managed.
+# Marqueur stable, indépendant du titre : seuls les événements marqués HOLM sont gérés.
 _MARKER = "HOLM-MY-MENU:" 
 _LOGGER = logging.getLogger(__name__)
 
@@ -103,14 +107,20 @@ def _equivalent(current, desired):
     return True
 
 
-# CALENDRIER : création/mise à jour idempotente ; préserver les identifiants d’événements.
-# Attention au contrat dtstart/dtend lors des mises à jour Home Assistant.
+# CALENDRIER : export idempotent, sans doublons, à partir des événements réellement présents.
+# Conserver les UID pour modifier ou supprimer les événements HOLM existants.
 async def export_to_calendar(hass: HomeAssistant, store, entity_id: str, start: str, end: str,
                              prefix: str, mode: str = "sync", confirm_delete: bool = False):
-    """Idempotent export based on actual calendar events, not browser state.
+    """Exporte le planning vers une entité calendrier Home Assistant.
 
-    Updates/removals require the calendar entity to advertise the matching features.
-    If a change is unsupported, no replacement event is created, avoiding duplicates.
+    Mode « missing » : ajoute uniquement les repas absents ; ne modifie ni ne
+    supprime les événements HOLM déjà présents, même si leur contenu a changé.
+    Mode « sync » : ajoute les repas absents, actualise ceux qui ont changé et
+    retire les anciens événements HOLM après confirmation explicite.
+
+    Les événements non marqués HOLM ne sont jamais concernés. La lecture du
+    calendrier et les capacités de modification/suppression sont vérifiées
+    avant toute écriture pour éviter les doublons et les pertes involontaires.
     """
     if mode not in ("sync", "missing"):
         raise ValueError("Mode de synchronisation inconnu")
@@ -118,9 +128,8 @@ async def export_to_calendar(hass: HomeAssistant, store, entity_id: str, start: 
         raise ValueError("Calendrier introuvable")
     if not hass.services.has_service("calendar", "create_event"):
         raise ValueError("Création d'événement non disponible")
-    # Use Home Assistant's public calendar.get_events service. Looking up an
-    # entity via hass.data["calendar"].entity_component is not a supported API
-    # and returns None on recent Home Assistant versions.
+    # Lire d’abord les événements via le service public de Home Assistant.
+    # L’ancien accès hass.data["calendar"].entity_component n’est plus fiable.
     if not hass.services.has_service("calendar", "get_events"):
         raise ValueError("Le service calendar.get_events est indisponible")
     first = date.fromisoformat(start)
@@ -152,9 +161,9 @@ async def export_to_calendar(hass: HomeAssistant, store, entity_id: str, start: 
             f"Impossible de lire les événements via calendar.get_events : {err}. "
             "Export annulé pour éviter les doublons"
         ) from err
-    # HA stores all calendar entities in the EntityComponent indexed by
-    # DATA_COMPONENT, regardless of their integration (local, Google, CalDAV).
-    # The former platform.domain == "local_calendar" check was unreliable.
+    # Retrouver l’entité calendrier pour accéder à ses UID et à ses capacités.
+    # DATA_COMPONENT couvre les calendriers locaux, Google et CalDAV ; ne pas
+    # filtrer sur platform.domain, qui ne fonctionne pas pour tous les fournisseurs.
     calendar_entity = None
     try:
         component = hass.data.get(DATA_COMPONENT)
@@ -165,12 +174,15 @@ async def export_to_calendar(hass: HomeAssistant, store, entity_id: str, start: 
 
     if calendar_entity is not None:
         try:
-            # Direct API returns CalendarEvent objects, including UID.
+            # La lecture directe fournit les objets CalendarEvent et leurs UID,
+            # nécessaires pour mettre à jour ou supprimer un événement précis.
             existing = await calendar_entity.async_get_events(hass, from_dt, to_dt)
         except Exception as err:
             raise ValueError(
                 f"Lecture du calendrier impossible : {err}. Aucun changement effectué"
             ) from err
+    # Ne gérer que les événements identifiés par le marqueur HOLM et situés
+    # dans la période choisie : les rendez-vous personnels restent intacts.
     owned = {}
     for event in existing:
         key = _extract(_field(event, "description", ""))
@@ -178,10 +190,14 @@ async def export_to_calendar(hass: HomeAssistant, store, entity_id: str, start: 
             owned.setdefault(key, []).append(event)
     if any(len(events) > 1 for events in owned.values()):
         raise ValueError("Plusieurs événements HOLM existent pour un même repas. Corriger les doublons avant de synchroniser")
+    # Construire l’état attendu du planning ; la clé date + créneau est stable,
+    # même si le nom de la recette ou le préfixe change.
     desired = {}
     for event in calendar_events(store, start, end, prefix, hass.config.time_zone):
         key = _key(event["day"], event["slot"])
         desired[key] = {**event, "description": _tag(event["description"], key)}
+    # Comparer l’état actuel à l’état attendu. En mode « missing », un repas
+    # déjà présent est laissé tel quel ; en mode « sync », il est actualisé.
     to_create = []
     to_update = []
     to_delete = []
@@ -200,6 +216,9 @@ async def export_to_calendar(hass: HomeAssistant, store, entity_id: str, start: 
         for key, current in owned.items():
             if key not in desired:
                 to_delete.append(current[0])
+    # Vérifier les fonctions annoncées par le calendrier avant toute écriture.
+    # Sans prise en charge de la modification/suppression, on refuse l’opération
+    # plutôt que de recréer des événements ou de laisser un export partiel.
     features = getattr(calendar_entity, "supported_features", 0) if calendar_entity is not None else 0
     has_update = bool(features & CalendarEntityFeature.UPDATE_EVENT)
     has_delete = bool(features & CalendarEntityFeature.DELETE_EVENT)
@@ -216,12 +235,13 @@ async def export_to_calendar(hass: HomeAssistant, store, entity_id: str, start: 
         if not _field(current, "uid"):
             raise ValueError("Événement sans UID : suppression impossible en sécurité")
     result = {"created": 0, "updated": 0, "deleted": 0, "unchanged": unchanged, "total": len(desired)}
-    # No destructive action before all capabilities are validated.
+    # Exécuter les changements uniquement après validation des capacités, des
+    # confirmations de suppression et de la présence des UID nécessaires.
     for current, event in to_update:
         uid = _field(current, "uid")
-        # HA CalendarEntity.async_update_event uses dtstart/dtend in its
-        # update payload (not start/end, which are CalendarEvent attributes).
-        # Keep timezone-aware datetimes to preserve the scheduled meal hour.
+        # L’API async_update_event attend « dtstart » / « dtend », contrairement
+        # aux attributs « start » / « end » des CalendarEvent. Conserver le
+        # fuseau horaire pour ne pas décaler les heures des repas.
         await calendar_entity.async_update_event(
             uid,
             {
@@ -236,6 +256,7 @@ async def export_to_calendar(hass: HomeAssistant, store, entity_id: str, start: 
         uid = _field(current, "uid")
         await calendar_entity.async_delete_event(uid)
         result["deleted"] += 1
+    # Ajouter en dernier les repas manquants, sans toucher aux autres événements.
     for event in to_create:
         payload = {"entity_id": entity_id, **{k: event[k] for k in ("summary", "description", "start_date_time", "end_date_time")}}
         await hass.services.async_call("calendar", "create_event", payload, blocking=True)
