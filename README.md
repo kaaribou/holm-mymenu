@@ -100,8 +100,6 @@ Copiez le dossier `custom_components/holm_mymenu` dans `/config/custom_component
 
 Pour envoyer la liste de courses ou les rappels par e-mail, configurez d'abord l'intégration [**SMTP** de Home Assistant](https://www.home-assistant.io/integrations/smtp/). Elle fournit le serveur, le port, les identifiants et l'expéditeur ; HOLM réutilise ces réglages et permet de choisir les destinataires dans son carnet d'adresses.
 
-> **SMTP**, et non **SNMP** : SNMP sert à superviser des équipements réseau, tandis que SMTP sert à envoyer des e-mails. Aucun serveur SMTP n'est nécessaire si vous utilisez uniquement Telegram ou les notifications mobiles.
-
 ### Notifications et courses interactives : Telegram
 
 1. Configurez l'intégration [**Telegram Bot** de Home Assistant](https://www.home-assistant.io/integrations/telegram_bot/) avec votre bot et autorisez les discussions (chats) destinataires. HOLM n'a pas besoin d'un deuxième jeton Telegram.
