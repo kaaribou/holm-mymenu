@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.6
+
+- **Courses** : regroupement des ingrédients équivalents pour l’affichage sans perdre les articles originaux, catégories personnalisables, exclusions temporaires et restauration des articles. La période de génération est conservée dans les messages envoyés.
+- **Telegram** : envoi interactif de la liste par chat ou sujet de supergroupe, boutons de cochage synchronisés avec Home Assistant, pagination des listes longues et actualisation des messages existants. Les rappels restent indépendants de cette liste.
+- **Rappels** : programmation ponctuelle, quotidienne ou hebdomadaire selon le fuseau horaire Home Assistant, avec notifications HA, Telegram et e-mail SMTP ; option « uniquement si nécessaire », test manuel et protection contre les doublons de déclenchement.
+- **Calendriers** : export manuel du planning vers une entité calendrier Home Assistant (local, Google Calendar ou CalDAV) ; ajout des repas manquants ou synchronisation des événements HOLM, avec confirmation préalable aux suppressions. Les autres rendez-vous restent intacts.
+- **Recettes PDF** : import d’un PDF texte (8 Mo et 15 pages maximum), transfert par fragments, extraction des données de recette et, si disponible, d’une illustration intégrée. **OCR supprimé** : les documents scannés sans texte sélectionnable ne sont plus acceptés.
+- **Correction** : l’envoi de la liste de courses par e-mail ne plante plus lorsque le titre est enrichi avec la période (variable `title` initialisée).
+- **Documentation** : commentaires des fonctions Telegram, rappels, API WebSocket et export calendrier harmonisés ; README enrichi pour les intégrations de notification, l’import PDF et les calendriers.
+
 ## 1.1.5
 - **Plusieurs recettes dans un même repas : toutes les photos s'affichent** (#6). Avec deux recettes illustrées, le fond du repas est partagé en deux, en diagonale ; avec trois, en trois bandes, et un badge « +1 », « +2 »… indique les photos en plus. Dans la vue Semaine comme dans le menu du jour.
 - iPhone / iPad : la carte ne garde plus une hauteur figée quand elle est rafraîchie dans un onglet caché.
