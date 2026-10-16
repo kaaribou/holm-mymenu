@@ -131,23 +131,6 @@ async def _read_share(hass, path: str, root: str) -> tuple[bytes, str]:
     return await hass.async_add_executor_job(read), file.name
 
 
-async def _ocr(session, url: str, token: str, data: bytes, filename: str) -> str:
-    if not url:
-        raise DocumentImportError("OCR requis : configurez l'URL du serveur OCR local dans les options HOLM")
-    if not url.startswith(("http://", "https://")):
-        raise DocumentImportError("URL OCR invalide")
-    try:
-        async with session.post(url.rstrip("/") + "/ocr", data=data,
-                                headers={"Content-Type": "application/octet-stream", "X-File-Name": filename[:160], "Authorization": f"Bearer {token}"},
-                                timeout=aiohttp.ClientTimeout(total=120)) as resp:
-            if resp.status != 200:
-                raise DocumentImportError(f"Serveur OCR : HTTP {resp.status} — {(await resp.text())[:180]}")
-            obj = await resp.json()
-            return obj.get("text", "")
-    except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-        raise DocumentImportError(f"Serveur OCR inaccessible : {err}") from err
-
-
 async def analyze(hass, session, *, url=None, path=None, file_data=None, filename="", options=None) -> dict:
     options = options or {}
     if sum(x is not None for x in (url, path, file_data)) != 1:
@@ -169,8 +152,10 @@ async def analyze(hass, session, *, url=None, path=None, file_data=None, filenam
         text = await hass.async_add_executor_job(_extract_pdf, data)
     except Exception as err:
         raise DocumentImportError(f"Lecture PDF impossible : {err}") from err
+    # Pas d’OCR : seuls les PDF contenant du texte sélectionnable sont pris en charge.
+    # Un PDF scanné doit être converti en PDF texte avant son importation.
     if len(text.strip()) < 90:
-        text = await _ocr(session, options.get("import_ocr_url", ""), options.get("import_ocr_token", ""), data, filename or "document.pdf")
+        raise DocumentImportError("PDF sans texte exploitable : les documents scannés ne sont pas pris en charge (OCR supprimé).")
     result = _parse_text(text, filename)
     # Pour un document PDF importé, son nom de fichier est le titre attendu.
     if filename:
