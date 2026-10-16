@@ -1,4 +1,4 @@
-"""Persistent HOLM reminders, scheduled in Home Assistant local time."""
+"""Rappels HOLM persistants, planifiés selon l’heure locale de Home Assistant."""
 from __future__ import annotations
 
 import logging
@@ -15,6 +15,10 @@ FREQUENCIES = {"once", "daily", "weekly"}
 
 
 def validate(data):
+    """Valide fréquence, horaire et destinataires avant stockage du rappel.
+
+    Les jours hebdomadaires suivent weekday() : lundi=0, dimanche=6.
+    """
     title = str(data.get("title", "")).strip()
     if not title or len(title) > 100:
         raise ValueError("Titre requis (100 caractères maximum)")
@@ -64,6 +68,11 @@ def validate(data):
 # RAPPELS : planification selon le fuseau HA, état persistant et protection anti-doublons.
 # Canaux indépendants : notification mobile, Telegram et e-mail.
 class ReminderManager:
+    """Gère les rappels enregistrés et leurs envois multicanaux.
+
+    Vérification toutes les 30 secondes dans le fuseau HA ; le marqueur last_run
+    empêche un second envoi pendant la même minute, même après redémarrage.
+    """
     def __init__(self, hass, store):
         self.hass, self.store = hass, store
         self._unsub = None
@@ -79,12 +88,14 @@ class ReminderManager:
             self._unsub = None
 
     def save(self, payload, reminder_id=None):
+        """Crée ou modifie un rappel, sans réarmer une simple modification de texte."""
         data = validate(payload)
         existing = next((r for r in self.store.data["reminders"] if r["id"] == reminder_id), None)
         if reminder_id and not existing:
             raise ValueError("Rappel introuvable")
         if existing:
-            # Do not lose the deduplication marker on cosmetic edits.
+            # Conserver last_run lors d’un changement de titre ou de message.
+            # Réinitialiser uniquement si la date, les jours ou l’heure changent.
             changed_schedule = any(existing.get(k) != data[k] for k in ("time", "frequency", "days", "date"))
             existing.update(data)
             if changed_schedule:
@@ -104,6 +115,7 @@ class ReminderManager:
         self.store.changed("reminders")
 
     def _due(self, r, now):
+        """Teste l’heure locale et la récurrence (ponctuelle, quotidienne, hebdo)."""
         if not r.get("enabled", True): return False
         if r.get("time") != now.strftime("%H:%M"): return False
         frequency = r.get("frequency")
@@ -112,6 +124,7 @@ class ReminderManager:
         return frequency == "daily"
 
     def _message(self, r):
+        """Prépare le message commun et ignore les rappels inutiles si demandé."""
         kind = r["kind"]
         if kind == "custom": return r.get("message") or r["title"]
         if kind == "shopping":
@@ -125,19 +138,26 @@ class ReminderManager:
                     + f"{len(pending)} article(s) restant(s) à acheter.")
         if kind == "planning":
             today = dt_util.now().date()
-            # Next 7 calendar days; avoid treating a recipe's ingredient list as a menu.
+            # Examiner les sept prochains jours du planning, sans confondre
+            # les ingrédients d’une recette avec un repas planifié.
             plan = self.store.data["plan"]
             missing = [ (today + timedelta(days=i)).strftime("%d/%m") for i in range(7)
                         if any(not plan.get((today + timedelta(days=i)).isoformat(), {}).get(slot)
                                for slot in ("midi", "soir"))]
             if not missing and r.get("only_if_needed", True): return None
             return f"📅 {r['title']}\n{len(missing)} jour(s) avec au moins un repas non planifié sur les 7 prochains jours."
-        # Preparation reminders are manual instructions, not inferred from recipe content.
+        # Le rappel de préparation est saisi par l’utilisateur : pas d’inférence
+        # automatique depuis les ingrédients ou les étapes de la recette.
         if kind == "recipe": return "🍳 " + (r.get("message") or r["title"])
         return r["title"]
 
     async def _send(self, r, body):
-        """Envoi multicanal d'un corps commun, sans modifier la liste interactive."""
+        """Envoie un même texte à Telegram, aux notifications HA et par SMTP.
+
+        Les messages de rappel Telegram restent séparés de la liste interactive.
+        En cas d’échec d’un canal, une exception interrompt la suite des envois ;
+        les canaux déjà traités ne sont pas annulés.
+        """
         sent = 0
         for target in r.get("telegram_targets", []):
             if not self.hass.services.has_service("telegram_bot", "send_message"):
@@ -169,6 +189,7 @@ class ReminderManager:
             raise RuntimeError("Aucun destinataire configuré")
 
     async def execute(self, r, test=False):
+        """Exécute le rappel ; un test ne change pas son statut ni last_run."""
         body = self._message(r)
         if body is None:
             if not test:
@@ -182,6 +203,12 @@ class ReminderManager:
         return "Notification envoyée"
 
     async def _tick(self, _now):
+        """Contrôle les rappels dus et mémorise leur minute avant l’envoi.
+
+        En cas d’erreur, last_status contient l’échec mais last_run reste posé :
+        aucun renvoi automatique n’a lieu dans la même minute. Le verrou
+        évite que deux passages du minuteur s’exécutent simultanément.
+        """
         if self._lock: return
         self._lock = True
         try:
@@ -189,7 +216,8 @@ class ReminderManager:
             key = now.strftime("%Y-%m-%d %H:%M")
             for r in list(self.store.data.get("reminders", [])):
                 if not self._due(r, now) or r.get("last_run") == key: continue
-                # Persist before sending to prevent duplicate notifications on HA restart.
+                # Persister last_run avant l’envoi pour éviter un doublon après
+                # redémarrage, même si un canal échoue ensuite.
                 r["last_run"] = key
                 self.store.changed("reminders")
                 try: await self.execute(r)
