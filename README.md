@@ -40,13 +40,17 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
 - 🛒 **Liste de courses** :
   - générée depuis la semaine choisie, avec les quantités mises à l'échelle et additionnées (1 l + 30 cl de lait = 1,3 l) ;
   - rangée par rayon, avec des articles ajoutés à la main et des cases à cocher en magasin ;
-  - **envoi par e-mail à plusieurs personnes** grâce au carnet d'adresses, et/ou en notification sur les téléphones ; copie ou vidage en un geste.
+  - **envoi par e-mail à plusieurs personnes** grâce au carnet d'adresses, par Telegram et/ou en notification sur les téléphones ; copie ou vidage en un geste ;
+  - regroupement des variantes d'ingrédients (œufs, lardons, beurre doux…), catégories personnalisées, exclusions temporaires par semaine et restauration des articles ;
+  - liste Telegram interactive avec boutons de validation synchronisés avec Home Assistant.
 - 📷 **Photos et code-barre** : photo d'une recette prise avec le téléphone ou choisie dans la galerie ; ajout d'un produit en **scannant son code-barre**.
 - 📊 **Statistiques** : recettes les plus planifiées, ingrédients les plus utilisés, repas par semaine, taille de la base.
 - 🖼️ **Quatre vues pour la carte** :
   - **Complet** pour tout gérer ;
   - **Menu du jour** et **Semaine** en simple consultation, idéales pour une tablette murale. Un toucher sur un plat ou un produit l'affiche en grand ;
   - **Statistiques**.
+- 🔔 **Rappels programmables** : courses, menus, préparation des recettes ou message personnalisé ; envoi ponctuel, quotidien ou hebdomadaire par notification Home Assistant, Telegram ou e-mail.
+- 📄 **Import de recettes depuis un PDF texte** : lecture locale avec `pypdf`, sans service OCR ni serveur externe. Les PDF scannés sans texte sélectionnable ne sont pas pris en charge.
 - 🧩 **Capteurs** pour vos automatisations : menu du midi, menu du soir et prochain repas.
 
 ---
@@ -59,6 +63,7 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
 - [Recettes](#recettes)
 - [Ingrédients et Open Food Facts](#ingrédients-et-open-food-facts)
 - [Liste de courses](#liste-de-courses)
+- [Rappels et notifications](#rappels-et-notifications)
 - [Statistiques](#statistiques)
 - [Capteurs](#capteurs)
 - [FAQ / dépannage](#faq--dépannage)
@@ -90,6 +95,21 @@ Copiez le dossier `custom_components/holm_mymenu` dans `/config/custom_component
 3. Facultatif, dans **Configurer** (les options de l'intégration) :
    - **Adresse de Mealie** (ex. `http://192.168.1.10:9925`) et **jeton d'API Mealie** (Mealie → Profil → Jetons d'API), pour importer vos recettes Mealie ;
    - le nombre de personnes par défaut peut être changé à tout moment.
+
+### Notifications par e-mail : SMTP
+
+Pour envoyer la liste de courses ou les rappels par e-mail, configurez d'abord l'intégration [**SMTP** de Home Assistant](https://www.home-assistant.io/integrations/smtp/). Elle fournit le serveur, le port, les identifiants et l'expéditeur ; HOLM réutilise ces réglages et permet de choisir les destinataires dans son carnet d'adresses.
+
+> **SMTP**, et non **SNMP** : SNMP sert à superviser des équipements réseau, tandis que SMTP sert à envoyer des e-mails. Aucun serveur SMTP n'est nécessaire si vous utilisez uniquement Telegram ou les notifications mobiles.
+
+### Notifications et courses interactives : Telegram
+
+1. Configurez l'intégration [**Telegram Bot** de Home Assistant](https://www.home-assistant.io/integrations/telegram_bot/) avec votre bot et autorisez les discussions (chats) destinataires. HOLM n'a pas besoin d'un deuxième jeton Telegram.
+2. Vérifiez que Home Assistant dispose du service `telegram_bot.send_message` et que le bot peut publier dans le chat ou le groupe choisi.
+3. Dans l'onglet **Courses** de HOLM, ouvrez l'envoi de la liste, sélectionnez la destination Telegram (identifiant du chat et, pour un sujet de supergroupe, identifiant du fil), puis publiez.
+4. Le message affiche les catégories et les quantités ; ses boutons permettent de cocher ou décocher les articles. Les changements sont répercutés dans la liste HOLM et les messages publiés sont mis à jour.
+
+Pour les notifications sur téléphone, installez l'[**application compagnon Home Assistant**](https://www.home-assistant.io/integrations/mobile_app/) et activez les notifications de l'appareil. Vous pourrez ensuite sélectionner les entités de notification disponibles.
 
 Tout est stocké localement dans Home Assistant (`.storage/holm_mymenu`), et les photos dans `www/holm_mymenu/`. Ce dossier est créé par l'intégration et ses photos sont servies par elle-même : rien à préparer, et elles s'affichent même si le dossier `www` n'existait pas encore.
 
@@ -194,7 +214,23 @@ Dans la fiche d'une recette, vous pouvez :
   - **un seul e-mail** part vers toutes les adresses cochées, mis en forme par rayon avec une case à cocher par article. Il utilise les réglages de votre intégration **SMTP** de Home Assistant (serveur, identifiants, expéditeur) : rien à ressaisir, et aucune adresse à déclarer comme destinataire SMTP ;
   - les **téléphones et tablettes** (entités de notification) peuvent aussi être cochés : ils reçoivent la liste en notification ;
   - **Ouvrir ma messagerie** prépare le même message dans la messagerie de l'appareil, avec les adresses cochées.
+- Les articles similaires sont regroupés pour l'affichage, sans perdre les entrées d'origine : par exemple **œuf/œufs**, **lardon/lardons/lardon nature ou fumé** et **beurre/beurre doux**. Les quantités compatibles sont additionnées.
+- Vous pouvez **personnaliser les catégories**, modifier ou retirer un article de la liste sans supprimer l'ingrédient de sa recette, et **exclure des articles pour une semaine** puis les restaurer individuellement ou tous ensemble.
+- L'envoi **Telegram** propose une liste interactive, synchronisée avec les cases à cocher dans HOLM. Le message conserve les rayons, les quantités et les dates de la semaine de courses.
 - **Copier** met la liste dans le presse-papiers. **Vider la liste** repart de zéro.
+
+---
+
+## Rappels et notifications
+
+HOLM permet de programmer des rappels pour **faire les courses**, **consulter les menus**, **préparer une recette** ou envoyer un **message personnalisé** (par exemple « Acheter les pommes de terre à la ferme »).
+
+- **Fréquence** : une seule fois, chaque jour ou chaque semaine, avec choix de l'heure et, pour les rappels hebdomadaires, des jours.
+- **Canaux** : notification Home Assistant sur téléphone, Telegram (chat ou sujet) et e-mail via SMTP. Plusieurs destinataires peuvent être sélectionnés.
+- **Courses** : le rappel et les messages envoyés mentionnent la période correspondant à la liste sélectionnée.
+- **Gestion** : création, modification, suppression et test d'un rappel depuis l'interface HOLM.
+
+Les paramètres des canaux sont ceux des intégrations [SMTP](https://www.home-assistant.io/integrations/smtp/), [Telegram Bot](https://www.home-assistant.io/integrations/telegram_bot/) et [Mobile App](https://www.home-assistant.io/integrations/mobile_app/) de Home Assistant : HOLM ne stocke pas de mot de passe SMTP ni de jeton Telegram supplémentaire.
 
 ---
 
@@ -263,6 +299,12 @@ Open Food Facts est un service gratuit, parfois saturé. Réessayez un peu plus 
 
 **Une recette Marmiton ne s'importe pas.**
 Marmiton peut changer sa page. Essayez l'import par **Lien** ; sinon, ouvrez une issue avec l'adresse de la recette.
+
+**Un PDF scanné ne s'importe pas.**
+HOLM lit les PDF qui contiennent du texte exploitable. L'OCR a été retiré : convertissez d'abord le scan en PDF avec texte sélectionnable.
+
+**Telegram n'envoie pas la liste ou les boutons ne répondent pas.**
+Vérifiez l'intégration [Telegram Bot](https://www.home-assistant.io/integrations/telegram_bot/), les chats autorisés, les droits du bot dans le groupe et, le cas échéant, l'identifiant du sujet. Le service `telegram_bot.send_message` doit être disponible.
 
 **L'envoi par e-mail échoue.**
 L'envoi utilise l'intégration **SMTP** de Home Assistant : vérifiez qu'elle est configurée et qu'elle fonctionne. Pour Gmail, il faut un *mot de passe d'application*. Sans intégration SMTP, utilisez « Ouvrir ma messagerie ».
