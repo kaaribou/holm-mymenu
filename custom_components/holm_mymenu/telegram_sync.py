@@ -17,21 +17,30 @@ import voluptuous as vol
 from homeassistant.core import callback, SupportsResponse
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers import config_validation as cv
-from .const import DOMAIN, SIGNAL_UPDATED, AISLES
-from .parser import to_base, pretty_qty
+from .const import DOMAIN, SIGNAL_UPDATED
+from .parser import to_base
 from .shopping_groups import shopping_groups
 from .shopping_period import shopping_period
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def register_shopping_services(hass, store):
-    """Expose la liste et le cochage via des services HA, même sans Telegram."""
+def register_shopping_services(hass):
+    """Expose la liste et le cochage via des services HA, même sans Telegram.
+
+    Le magasin est relu à chaque appel : après un rechargement de l'intégration,
+    les services agissent sur les données courantes et non sur une ancienne copie.
+    """
+    def _current():
+        return hass.data[DOMAIN]["store"]
+
     async def get_list(call):
+        store = _current()
         return {"range": store.data["shopping"].get("range"),
                 "items": [dict(item) for item in store.data["shopping"].get("items", [])]}
 
     async def set_item(call):
+        store = _current()
         item_id = call.data["item_id"]
         found = next((x for x in store.data["shopping"].get("items", []) if x["id"] == item_id), None)
         if found is None:
@@ -85,24 +94,6 @@ class TelegramShoppingSync:
                 for (chat, thread), ids in self.destinations.items()
             ]}, 1.0
         )
-
-    def _render(self):
-        sh = self.store.data["shopping"]
-        rng = sh.get("range") or {}
-        title = "🛒 Liste de courses"
-        if rng.get("start"):
-            title += " — " + rng["start"]
-        lines = [title]
-        items = sh.get("items", [])
-        for key, label in self.store.aisles():
-            subset = [it for it in items if (it.get("aisle") or "autre") == key]
-            if subset:
-                lines.append("\n" + label)
-                lines.extend(("☑ " if it.get("checked") else "☐ ") + it["name"] +
-                             (" — " + it["display"] if it.get("display") else "") for it in subset)
-        if not items:
-            lines.append("(empty list)" if language == "en" else "(liste vide)")
-        return "\n".join(lines)
 
     def _language(self):
         """Use Home Assistant's language, falling back to French."""

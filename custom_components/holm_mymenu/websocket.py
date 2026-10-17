@@ -6,7 +6,6 @@ import binascii
 import secrets
 import time
 import logging
-from datetime import date
 
 import voluptuous as vol
 
@@ -16,11 +15,11 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import CONF_MEALIE_TOKEN, CONF_MEALIE_URL, DOMAIN, SIGNAL_UPDATED, SLOTS
-from .sources import SourceError, import_recipe_url, marmiton_search, mealie_recipe, mealie_recipes, off_product, off_search
+from .sources import SourceError, import_recipe_url, marmiton_search, mealie_export, mealie_recipe, mealie_recipes, off_product, off_search
 from .mailer import MailError, build_bodies, send_mail, smtp_settings
 from .store import MenuStore, gather_limited
 from .shopping_period import shopping_period
-from .calendar_export import calendar_events, export_to_calendar
+from .calendar_export import export_to_calendar
 from .document_import import analyze, DocumentImportError
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,8 +43,8 @@ def _err(connection, msg, e: Exception) -> None:
 def async_register(hass: HomeAssistant) -> None:
     for fn in (ws_subscribe, ws_ing_search, ws_ing_add, ws_ing_update, ws_ing_delete, ws_ing_merge, ws_recipe_get, ws_marmiton,
                ws_import, ws_recipe_save, ws_recipe_delete, ws_plan_set, ws_plan_add, ws_plan_move, ws_shop_generate, ws_shop_add,
-               ws_shop_toggle, ws_shop_toggle_group, ws_shop_remove_group, ws_shop_remove, ws_shop_update, ws_aisle_create, ws_aisle_update, ws_aisle_delete, ws_shop_restore, ws_mealie_list, ws_mealie_import, ws_contact_save, ws_contact_delete,
-               ws_shop_send, ws_stats, ws_image_upload, ws_barcode, ws_mail_info, ws_calendar_export, ws_document_analyze, ws_document_upload_start,
+               ws_shop_toggle, ws_shop_toggle_group, ws_shop_remove_group, ws_shop_remove, ws_shop_update, ws_aisle_create, ws_aisle_update, ws_aisle_delete, ws_shop_restore, ws_mealie_list, ws_mealie_import, ws_mealie_export, ws_contact_save, ws_contact_delete,
+               ws_shop_send, ws_stats, ws_image_upload, ws_barcode, ws_mail_info, ws_calendar_export, ws_document_upload_start,
                ws_document_upload_chunk, ws_document_upload_finish, ws_document_upload_cancel,
                ws_reminder_save, ws_reminder_delete, ws_reminder_test):
         websocket_api.async_register_command(hass, fn)
@@ -143,7 +142,9 @@ async def ws_recipe_get(hass, connection, msg):
     r = _store(hass).data["recipes"].get(msg["recipe_id"])
     if not r:
         return connection.send_error(msg["id"], "not_found", "Recette introuvable")
-    connection.send_result(msg["id"], r)
+    opts = hass.data[DOMAIN].get("options", {})
+    # Indique à la carte si l'export Mealie est possible (bouton discret affiché seulement dans ce cas).
+    connection.send_result(msg["id"], {**r, "mealie_enabled": bool(opts.get(CONF_MEALIE_URL) and opts.get(CONF_MEALIE_TOKEN))})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/recipe/marmiton_search", vol.Required("query"): str})
@@ -407,6 +408,26 @@ async def ws_mealie_import(hass, connection, msg):
     connection.send_result(msg["id"], {"imported": ok, "skipped": len(msg["slugs"]) - len(todo), "errors": errors[:5]})
 
 
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/mealie/export", vol.Required("recipe_id"): str})
+@websocket_api.async_response
+async def ws_mealie_export(hass, connection, msg):
+    """Envoie une recette vers Mealie (sans doublon : une recette déjà envoyée renvoie son lien)."""
+    store = _store(hass)
+    rec = store.data["recipes"].get(msg["recipe_id"])
+    if not rec:
+        return connection.send_error(msg["id"], "not_found", "Recette introuvable")
+    try:
+        url, token = _mealie(hass)
+        image = await hass.async_add_executor_job(store.local_image, rec)
+        out = await mealie_export(async_get_clientsession(hass), url, token, rec, image)
+    except SourceError as e:
+        return _err(connection, msg, e)
+    rec["mealie_slug"] = out["slug"]
+    rec["mealie_link"] = out["link"]
+    store.changed("recipes")
+    connection.send_result(msg["id"], out)
+
+
 # ---------------- carnet d'adresses et envoi ----------------
 @websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/contact/save", vol.Required("name"): str, vol.Required("email"): str,
                                   vol.Optional("contact_id"): vol.Any(str, None)})
@@ -585,31 +606,6 @@ async def ws_calendar_export(hass, connection, msg):
     connection.send_result(msg["id"], result)
 
 
-@websocket_api.websocket_command({
-    vol.Required("type"): "holm_mymenu/recipe/analyze_document",
-    vol.Optional("url"): str,
-    vol.Optional("path"): str,
-    vol.Optional("file_data"): str,
-    vol.Optional("filename"): str,
-})
-@websocket_api.async_response
-async def ws_document_analyze(hass, connection, msg):
-    """Analyse une source PDF autorisée et renvoie un brouillon de recette.
-
-    Les documents scannés sans texte sélectionnable ne sont pas pris en charge.
-    """
-    try:
-        result = await analyze(
-            hass, async_get_clientsession(hass),
-            url=msg.get("url"), path=msg.get("path"),
-            file_data=msg.get("file_data"), filename=msg.get("filename", ""),
-            options=hass.data[DOMAIN].get("options", {}),
-        )
-        connection.send_result(msg["id"], result)
-    except (DocumentImportError, ValueError) as err:
-        _err(connection, msg, err)
-
-
 # ---------------- import de documents par fragments ----------------
 # Les limites WebSocket de HA interdisent un PDF de plusieurs Mo en un seul
 # message. Un transfert n'existe qu'en RAM, expire au bout de 10 minutes et
@@ -701,12 +697,7 @@ async def ws_document_upload_finish(hass, connection, msg):
             raise DocumentImportError("Fichier incomplet")
         data = b"".join(item["parts"])
         item["parts"].clear()
-        result = await analyze(
-            hass, async_get_clientsession(hass),
-            file_data=base64.b64encode(data).decode("ascii"),
-            filename=item["filename"],
-            options=hass.data[DOMAIN].get("options", {}),
-        )
+        result = await analyze(hass, data, item["filename"])
         connection.send_result(msg["id"], result)
     except Exception as err:  # noqa: BLE001
         _err(connection, msg, err)

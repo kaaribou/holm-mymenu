@@ -186,6 +186,17 @@ class MenuStore:
         obj["image"] = f"{MEDIA_PATH}/{name}?v={int(time.time())}"
         obj.pop("image_remote", None)
 
+    def local_image(self, obj: dict) -> tuple[bytes, str] | None:
+        """Photo enregistrée par HOLM pour cet objet (bloquant : à lancer dans un exécuteur)."""
+        if not str(obj.get("image") or "").startswith(MEDIA_PATH):
+            return None
+        for ext in ("jpg", "webp"):
+            path = os.path.join(self._img_dir, f"{obj['id']}.{ext}")
+            if os.path.isfile(path):
+                with open(path, "rb") as f:
+                    return f.read(), ext
+        return None
+
     _BAD_UNITS = {"gram", "grams", "kilogram", "kilograms", "liter", "liters", "milliliter", "milliliters",
                   "tablespoon", "tablespoons", "teaspoon", "teaspoons", "tbsp", "tsp", "pinch", "fluid"}
 
@@ -351,7 +362,7 @@ class MenuStore:
             r = {"id": _id(), "created": time.time(), "favorite": False, "tags": [], "ingredients": [], "steps": []}
             self.data["recipes"][r["id"]] = r
         for k in ("name", "image", "source_url", "source", "servings", "prep", "cook", "total", "category", "rating", "steps", "tags",
-                  "favorite", "notes", "mealie_slug", "image_remote"):
+                  "favorite", "notes", "mealie_slug", "mealie_link", "image_remote"):
             if k in rec:
                 r[k] = rec[k]
         if lines is not None:

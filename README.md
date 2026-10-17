@@ -27,7 +27,7 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
 - 📖 **Recettes** :
   - **recherche Marmiton**, puis choix du résultat : la recette est importée avec sa photo, ses ingrédients et ses étapes ;
   - import depuis **n'importe quel lien** de recette (tous les sites qui publient le format schema.org) ;
-  - import de vos recettes **Mealie** ;
+  - import de vos recettes **Mealie**, et export vers Mealie des recettes trouvées ailleurs (Marmiton, lien, PDF, à la main) ;
   - saisie à la main, favoris, portions ajustables.
 - 🥫 **Ingrédients reliés à vos recettes** :
   - chaque ligne d'une recette est comprise (« 600 g de bœuf haché » donne 600 g de *Bœuf haché*) et reliée à votre base ;
@@ -95,7 +95,7 @@ Copiez le dossier `custom_components/holm_mymenu` dans `/config/custom_component
 1. **Paramètres → Appareils et services → Ajouter une intégration → HOLM My Menu.**
 2. Indiquez le **nombre de personnes par défaut**.
 3. Facultatif, dans **Configurer** (les options de l'intégration) :
-   - **Adresse de Mealie** (ex. `http://192.168.1.10:9925`) et **jeton d'API Mealie** (Mealie → Profil → Jetons d'API), pour importer vos recettes Mealie ;
+   - **Adresse de Mealie** (ex. `http://192.168.1.10:9925`) et **jeton d'API Mealie** (Mealie → Profil → Jetons d'API), pour importer vos recettes Mealie et y envoyer les vôtres ;
    - le nombre de personnes par défaut peut être changé à tout moment.
 
 ### Notifications par e-mail : SMTP
@@ -175,6 +175,15 @@ Bouton **Ajouter** de l'onglet Recettes :
 - **Marmiton** : tapez « lasagnes », choisissez un résultat, c'est importé.
 - **Lien** : collez l'adresse d'une recette, de Marmiton ou d'un autre site qui publie le format schema.org (la plupart des sites de cuisine).
 - **Mealie** : cochez les recettes à importer (adresse et jeton dans les options de l'intégration). Les recettes déjà importées sont signalées.
+
+### Envoyer une recette vers Mealie
+
+Quand l'adresse et le jeton Mealie sont renseignés, une petite toque 👨‍🍳 discrète apparaît au bout de la ligne d'informations d'une recette (temps, catégorie…).
+
+- **Recette venue d'une page web (Marmiton, lien)** : Mealie importe lui-même la page d'origine, avec sa photo, ses étapes et ses temps. Si la page lui est inaccessible, HOLM lui envoie sa propre copie de la recette.
+- **Recette PDF ou saisie à la main** : HOLM l'envoie au format standard `schema.org/Recipe`, puis sa photo.
+- **Pas de doublon** : une recette déjà envoyée (ou importée de Mealie) porte une coche verte ; la toque ouvre alors directement la recette dans Mealie.
+- Le jeton doit pouvoir créer des recettes (c'est le cas d'un jeton personnel). L'export de recettes saisies à la main nécessite **Mealie 2.0 ou plus récent**.
 - **PDF** : choisissez un document contenant du texte sélectionnable (voir la procédure ci-dessous).
 - **À la main** : nom, portions, temps, une ligne par ingrédient, une ligne par étape, et une **photo** : *Choisir une photo* (galerie du téléphone ou fichier) ou *Prendre une photo* avec l'appareil. Elle est réduite avant l'envoi et enregistrée sur votre Home Assistant.
 
@@ -374,7 +383,7 @@ HOLM My Menu vous fait gagner du temps chaque semaine ? Vous pouvez m'offrir une
 ## Crédits & licence
 
 - Données produits : [Open Food Facts](https://fr.openfoodfacts.org) (licence ODbL).
-- Recettes : [Marmiton](https://www.marmiton.org) et les sites d'origine, pour votre usage personnel ; [Mealie](https://mealie.io) pour l'import.
+- Recettes : [Marmiton](https://www.marmiton.org) et les sites d'origine, pour votre usage personnel ; [Mealie](https://mealie.io) pour l'import et l'export.
 - Code : licence **MIT** — © kaaribou.
 
 Voir le [CHANGELOG](CHANGELOG.md).

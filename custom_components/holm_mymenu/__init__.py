@@ -27,15 +27,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     store.data.setdefault("reminders", [])
     first = DOMAIN not in hass.data
     hass.data[DOMAIN] = {"store": store, "options": dict(entry.options)}
+    # Rappels et synchro Telegram : recréés à chaque chargement (un rechargement de
+    # l'intégration les arrête dans async_unload_entry, ils doivent donc repartir ici).
+    reminders = ReminderManager(hass, store)
+    hass.data[DOMAIN]["reminders"] = reminders
+    await reminders.async_start()
+    telegram_sync = TelegramShoppingSync(hass, store)
+    hass.data[DOMAIN]["telegram_sync"] = telegram_sync
+    await telegram_sync.async_start()
     if first:
         async_register(hass)
-        register_shopping_services(hass, store)
-        reminders = ReminderManager(hass, store)
-        hass.data[DOMAIN]["reminders"] = reminders
-        await reminders.async_start()
-        telegram_sync = TelegramShoppingSync(hass, store)
-        hass.data[DOMAIN]["telegram_sync"] = telegram_sync
-        await telegram_sync.async_start()
+        register_shopping_services(hass)
         # dossier des photos : créé ici et servi par l'intégration elle-même, pour fonctionner
         # même si config/www n'existait pas au démarrage de Home Assistant (/local inactif)
         media = hass.config.path("www", "holm_mymenu")
@@ -99,10 +101,10 @@ async def _options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded and DOMAIN in hass.data:
-        reminders = hass.data[DOMAIN].get("reminders")
+        reminders = hass.data[DOMAIN].pop("reminders", None)
         if reminders:
             await reminders.async_stop()
-        sync = hass.data[DOMAIN].get("telegram_sync")
+        sync = hass.data[DOMAIN].pop("telegram_sync", None)
         if sync:
             await sync.async_stop()
     return unloaded

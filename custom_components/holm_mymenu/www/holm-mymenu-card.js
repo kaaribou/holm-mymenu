@@ -1024,7 +1024,7 @@ class HolmMyMenuCard extends HTMLElement {
       const f = sv / (r.servings || 1);
       const mb = this._modal(esc(r.name), `
         <div class="rhero" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}></div>
-        <div class="rmeta">${r.prep ? `<span><ha-icon icon="mdi:knife"></ha-icon>Prépa ${mins(r.prep)}</span>` : ""}${r.cook ? `<span><ha-icon icon="mdi:stove"></ha-icon>Cuisson ${mins(r.cook)}</span>` : ""}${r.total ? `<span><ha-icon icon="mdi:clock-outline"></ha-icon>${mins(r.total)}</span>` : ""}${r.category ? `<span><ha-icon icon="mdi:tag-outline"></ha-icon>${esc(r.category)}</span>` : ""}${r.rating ? `<span><ha-icon icon="mdi:star"></ha-icon>${fq(r.rating)}</span>` : ""}</div>
+        <div class="rmeta">${r.prep ? `<span><ha-icon icon="mdi:knife"></ha-icon>Prépa ${mins(r.prep)}</span>` : ""}${r.cook ? `<span><ha-icon icon="mdi:stove"></ha-icon>Cuisson ${mins(r.cook)}</span>` : ""}${r.total ? `<span><ha-icon icon="mdi:clock-outline"></ha-icon>${mins(r.total)}</span>` : ""}${r.category ? `<span><ha-icon icon="mdi:tag-outline"></ha-icon>${esc(r.category)}</span>` : ""}${r.rating ? `<span><ha-icon icon="mdi:star"></ha-icon>${fq(r.rating)}</span>` : ""}${!ro && r.mealie_enabled ? `<button class="mealie-x${r.mealie_slug ? " on" : ""}" data-x="mealie" title="${r.mealie_slug ? "Ouvrir dans Mealie" : "Envoyer vers Mealie"}" aria-label="${r.mealie_slug ? "Ouvrir dans Mealie" : "Envoyer vers Mealie"}"><ha-icon icon="mdi:chef-hat"></ha-icon>${r.mealie_slug ? `<ha-icon class="ok" icon="mdi:check-circle"></ha-icon>` : ""}</button>` : ""}</div>
         ${ro ? (r.source_url ? `<div class="row act"><a class="pill" href="${esc(r.source_url)}" target="_blank" rel="noopener"><ha-icon icon="mdi:open-in-new"></ha-icon>Voir la recette d'origine</a></div>` : "") : `<div class="row act"><button class="pill main" data-x="plan"><ha-icon icon="mdi:calendar-plus"></ha-icon>Planifier</button>
           <button class="pill" data-x="fav"><ha-icon icon="mdi:heart${r.favorite ? "" : "-outline"}"></ha-icon>${r.favorite ? "Favori" : "Ajouter aux favoris"}</button>
           <button class="pill" data-x="edit"><ha-icon icon="mdi:pencil"></ha-icon>Modifier</button>
@@ -1041,6 +1041,18 @@ class HolmMyMenuCard extends HTMLElement {
       mb.querySelector('[data-x="edit"]').addEventListener("click", () => this._editRecipe(r));
       mb.querySelector('[data-x="del"]').addEventListener("click", async () => { if (!confirm(`Supprimer « ${r.name} » ?`)) return; await this._ws("recipe/delete", { recipe_id: r.id }); this._close(); });
       mb.querySelector('[data-x="plan"]').addEventListener("click", () => this._planRecipe(r, sv, () => draw()));
+      mb.querySelector('[data-x="mealie"]')?.addEventListener("click", async (e) => {
+        const b = e.currentTarget;
+        if (r.mealie_link) return window.open(r.mealie_link, "_blank", "noopener");
+        b.disabled = true; b.classList.add("busy");
+        try {
+          const out = await this._ws("mealie/export", { recipe_id: r.id });
+          r = { ...r, mealie_slug: out.slug, mealie_link: out.link };
+          this._toast(out.created ? `« ${r.name} » envoyée vers Mealie` : `« ${r.name} » est déjà dans Mealie`);
+          if (!out.created) window.open(out.link, "_blank", "noopener");
+          draw();
+        } catch (err) { this._toast(`Export Mealie : ${err.message || err}`); b.disabled = false; b.classList.remove("busy"); }
+      });
     };
     draw();
   }
@@ -1086,7 +1098,7 @@ class HolmMyMenuCard extends HTMLElement {
       raw.className = "f";
       raw.rows = 5;
       raw.readOnly = true;
-      raw.value = unclassified.join("\\n");
+      raw.value = unclassified.join("\n");
       area.append(summary, raw);
       mb.querySelector('[data-x="cancel"]').parentNode.before(area);
     }
@@ -1098,7 +1110,6 @@ class HolmMyMenuCard extends HTMLElement {
     this._bindPhoto(mb, (d) => { photo = d; });
     mb.querySelectorAll("input,textarea").forEach((x) => { x.addEventListener("keydown", (e) => e.stopPropagation()); x.addEventListener("keyup", (e) => e.stopPropagation()); });
     mb.querySelector('[data-x="cancel"]').addEventListener("click", () => (isNew ? this._close() : this._recipeModal(r.id)));
-    mb.querySelector('[data-x="newrayon"]')?.addEventListener("click", () => this._categoryModal(() => this._ingModal(id, ro, back)));
     mb.querySelector('[data-x="save"]').addEventListener("click", async () => {
       const v = (k) => mb.querySelector(`[data-f="${k}"]`).value.trim();
       if (!v("name")) return this._toast("Donnez un nom à la recette");
@@ -1601,6 +1612,13 @@ textarea.f { resize:vertical; font-family:inherit; }
 .pick { padding:10px 12px; border-radius:12px; border:1px solid var(--ac); background:none; color:var(--primary-text-color); font:inherit; }
 .res { display:flex; flex-direction:column; gap:2px; }
 .rh { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--secondary-text-color); margin:8px 4px 2px; }
+.mealie-x { margin-left:auto; position:relative; display:inline-grid; place-items:center; width:28px; height:28px; padding:0; border:0; border-radius:50%; background:none; color:var(--secondary-text-color); opacity:.45; cursor:pointer; transition:opacity .2s, background .2s; }
+.mealie-x:hover, .mealie-x:focus-visible { opacity:1; background:color-mix(in srgb, var(--ac) 12%, transparent); outline:none; }
+.mealie-x ha-icon { --mdc-icon-size:17px; }
+.mealie-x .ok { position:absolute; right:-1px; bottom:-1px; --mdc-icon-size:11px; color:var(--success-color, #3ecf8e); }
+.mealie-x.on { opacity:.7; }
+.mealie-x.busy { opacity:1; animation:mxp 1s ease-in-out infinite; }
+@keyframes mxp { 50% { opacity:.35; } }
 .rhero { aspect-ratio:16/7; border-radius:14px; background:color-mix(in srgb, var(--ac) 12%, transparent) center/cover; }
 .rmeta { display:flex; gap:12px; flex-wrap:wrap; font-size:12.5px; color:var(--secondary-text-color); } .rmeta span { display:flex; align-items:center; gap:4px; } .rmeta ha-icon { --mdc-icon-size:16px; }
 .cols { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.5fr); gap:18px; }

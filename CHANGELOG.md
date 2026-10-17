@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.7
+
+- **Export vers Mealie** : une toque discrète sur la fiche d'une recette l'envoie vers Mealie. Une recette web est importée par Mealie depuis sa page d'origine (photo, étapes, temps) ; une recette PDF ou saisie à la main est envoyée au format `schema.org/Recipe` avec sa photo. Pas de doublon : une recette déjà présente dans Mealie s'ouvre directement.
+- **Correction** : après un rechargement de l'intégration, les rappels et la synchronisation Telegram redémarrent (ils restaient arrêtés jusqu'au redémarrage de Home Assistant), et les actions `get_shopping_list` / `set_shopping_item` agissent sur les données courantes.
+- **Import PDF** : suppression des modes « lien » et « dossier partagé », inutilisables faute d'options ; l'import par fichier depuis la carte est inchangé.
+- **Correction** : le texte non classé d'un PDF s'affiche bien ligne par ligne dans l'éditeur.
+- Nettoyage du code (fonctions et imports inutilisés), version unifiée.
+- ⚠️ La version 1.1.6 ajoute la dépendance `pypdf` : Home Assistant l'installe au redémarrage qui suit la mise à jour.
+
 ## 1.1.6
 
 - **Courses** : regroupement des ingrédients équivalents pour l’affichage sans perdre les articles originaux, catégories personnalisables, exclusions temporaires et restauration des articles. La période de génération est conservée dans les messages envoyés.

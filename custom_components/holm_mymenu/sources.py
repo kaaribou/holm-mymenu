@@ -294,3 +294,144 @@ async def mealie_recipe(session: aiohttp.ClientSession, base: str, token: str, s
         "steps": steps,
         "mealie_slug": slug,
     }
+
+
+# ---------------- export vers Mealie ----------------
+def _iso_minutes(m) -> str | None:
+    try:
+        m = int(m or 0)
+    except (TypeError, ValueError):
+        return None
+    if m <= 0:
+        return None
+    h, mn = divmod(m, 60)
+    return "PT" + (f"{h}H" if h else "") + (f"{mn}M" if mn else "")
+
+
+def _fmt_qty(q) -> str:
+    if q is None:
+        return ""
+    try:
+        q = float(q)
+    except (TypeError, ValueError):
+        return str(q)
+    return str(int(q)) if q.is_integer() else f"{q:.2f}".rstrip("0").rstrip(".").replace(".", ",")
+
+
+def recipe_to_schema(rec: dict) -> dict:
+    """Recette HOLM -> objet schema.org/Recipe (format accepté par Mealie)."""
+    lines = []
+    for ln in rec.get("ingredients") or []:
+        txt = " ".join(x for x in (_fmt_qty(ln.get("qty")), ln.get("unit") or "", ln.get("name") or "") if x).strip()
+        if ln.get("note"):
+            txt += f" ({ln['note']})"
+        if txt:
+            lines.append(txt)
+    obj = {
+        "@context": "https://schema.org",
+        "@type": "Recipe",
+        "name": rec.get("name") or "Recette",
+        "recipeYield": str(rec.get("servings") or ""),
+        "recipeIngredient": lines,
+        "recipeInstructions": [{"@type": "HowToStep", "text": s} for s in rec.get("steps") or [] if str(s).strip()],
+    }
+    for key, val in (("prepTime", _iso_minutes(rec.get("prep"))), ("cookTime", _iso_minutes(rec.get("cook"))),
+                     ("totalTime", _iso_minutes(rec.get("total")))):
+        if val:
+            obj[key] = val
+    if rec.get("category"):
+        obj["recipeCategory"] = rec["category"]
+    if rec.get("notes"):
+        obj["description"] = rec["notes"]
+    remote = rec.get("image_remote") or (rec.get("image") if str(rec.get("image") or "").startswith("http") else "")
+    if remote:
+        obj["image"] = remote
+    if rec.get("source_url"):
+        obj["url"] = rec["source_url"]
+    return obj
+
+
+class MealieClient:
+    """Petit client d'écriture Mealie (v1.x et v2.x)."""
+
+    def __init__(self, session: aiohttp.ClientSession, base: str, token: str) -> None:
+        self.s, self.base = session, base.rstrip("/")
+        self.head = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+
+    async def _req(self, method: str, path: str, **kw):
+        try:
+            async with self.s.request(method, f"{self.base}{path}", headers=self.head, timeout=aiohttp.ClientTimeout(total=60), **kw) as r:
+                if r.status in (401, 403):
+                    raise SourceError("Jeton Mealie refusé (il doit avoir le droit de créer des recettes)")
+                body = await r.text()
+                try:
+                    data = json.loads(body) if body else None
+                except ValueError:
+                    data = body
+                return r.status, data
+        except (aiohttp.ClientError, TimeoutError) as e:
+            raise SourceError("Mealie ne répond pas") from e
+
+    async def exists(self, slug: str) -> bool:
+        status, _ = await self._req("GET", f"/api/recipes/{slug}")
+        return status == 200
+
+    async def recipe_link(self, slug: str) -> str:
+        """Lien vers la recette dans l'interface Mealie (groupe en v2, chemin classique sinon)."""
+        status, me = await self._req("GET", "/api/users/self")
+        group = me.get("groupSlug") if status == 200 and isinstance(me, dict) else None
+        return f"{self.base}/g/{group}/r/{slug}" if group else f"{self.base}/recipe/{slug}"
+
+    async def create_from_url(self, url: str) -> str | None:
+        """Mealie lit lui-même la page d'origine (photo, étapes, temps…). None si la page est illisible."""
+        for path in ("/api/recipes/create/url", "/api/recipes/create-url"):
+            status, data = await self._req("POST", path, json={"url": url, "includeTags": False})
+            if status in (200, 201) and isinstance(data, str) and data:
+                return data
+            if status not in (404, 405):
+                return None
+        return None
+
+    async def create_from_schema(self, obj: dict, url: str | None = None) -> str:
+        payload = {"data": json.dumps(obj, ensure_ascii=False), "includeTags": False}
+        if url:
+            payload["url"] = url
+        status, data = await self._req("POST", "/api/recipes/create/html-or-json", json=payload)
+        if status in (200, 201) and isinstance(data, str) and data:
+            return data
+        if status in (404, 405):
+            raise SourceError("Version de Mealie trop ancienne pour l'export (Mealie 2.0 ou plus récent requis)")
+        detail = data.get("detail") if isinstance(data, dict) else data
+        raise SourceError(f"Mealie a refusé la recette ({status}) {str(detail or '')[:120]}".strip())
+
+    async def upload_image(self, slug: str, body: bytes, ext: str) -> None:
+        form = aiohttp.FormData()
+        form.add_field("image", body, filename=f"image.{ext}", content_type=f"image/{'jpeg' if ext == 'jpg' else ext}")
+        form.add_field("extension", ext)
+        status, _ = await self._req("PUT", f"/api/recipes/{slug}/image", data=form)
+        if status not in (200, 201):
+            _LOGGER.debug("Photo non envoyée à Mealie pour %s (%s)", slug, status)
+
+
+async def mealie_export(session: aiohttp.ClientSession, base: str, token: str, rec: dict,
+                        image: tuple[bytes, str] | None = None) -> dict:
+    """Envoie une recette HOLM vers Mealie. Renvoie {"slug", "link", "created"}.
+
+    - déjà envoyée (mealie_slug encore présent dans Mealie) : rien n'est recréé ;
+    - recette issue d'une page web : Mealie importe la page d'origine ;
+    - sinon (ou si la page est illisible pour Mealie) : envoi au format schema.org/Recipe,
+      puis la photo locale éventuelle.
+    """
+    client = MealieClient(session, base, token)
+    slug = rec.get("mealie_slug")
+    if slug and await client.exists(slug):
+        return {"slug": slug, "link": await client.recipe_link(slug), "created": False}
+    slug = None
+    url = rec.get("source_url") or ""
+    if url.startswith("http") and rec.get("source") != "mealie":
+        slug = await client.create_from_url(url)
+    if not slug:
+        slug = await client.create_from_schema(recipe_to_schema(rec), url or None)
+        if image:
+            await client.upload_image(slug, *image)
+    return {"slug": slug, "link": await client.recipe_link(slug), "created": True}
