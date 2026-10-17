@@ -5,7 +5,10 @@
  *   today_slots: [midi, soir]   list_height: 620   show_frame: false
  */
 (() => {
-const VERSION = "1.1.5";
+const VERSION = "1.1.8-reminders-cleanup";
+// Shared by the Telegram sharing dialog and the calendar export dialog.
+const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v == null ? d : v; } catch (_) { return d; } };
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
@@ -56,7 +59,7 @@ class HolmMyMenuCard extends HTMLElement {
     this._week = this._week || monday(new Date());
     this._q = this._q || { recipes: "", ingredients: "" };
     this._lim = { recipes: 12, ingredients: 36 };
-    if (this.shadowRoot) this._render();
+    if (this.shadowRoot && !this._editingRecipe && !this._editingReminder) this._render();
   }
   set hass(h) {
     this._hass = h;
@@ -70,6 +73,9 @@ class HolmMyMenuCard extends HTMLElement {
     this._sub.catch((e) => { this._err = e && e.code === "unknown_command" ? "L'intégration HOLM My Menu n'est pas installée ou pas encore chargée." : (e && e.message) || String(e); this._sub = null; this._render(); });
   }
   _update() {
+    // Les notifications Home Assistant peuvent arriver pendant une sélection
+    // ou une suppression de texte. Ne jamais recréer le DOM de l'éditeur.
+    if (this._editingRecipe || this._editingReminder) return;
     const a = this.shadowRoot && this.shadowRoot.activeElement;
     if (a && a.matches("input.search, input.shop-add") && this._renderList !== undefined) {
       if (a.matches("input.search") && this._renderList()) return;
@@ -94,8 +100,8 @@ class HolmMyMenuCard extends HTMLElement {
     else if (c.view === "today") body = this._today();
     else if (c.view === "week") body = this._weekRO();
     else if (c.view === "stats") body = this._statsView();
-    else body = ({ week: this._weekView, recipes: this._recipesView, ingredients: this._ingView, shopping: this._shopView, stats: this._statsView }[this._tab] || this._weekView).call(this);
-    const tabs = [["week", "mdi:calendar-week", "Semaine"], ["recipes", "mdi:book-open-page-variant", "Recettes"], ["ingredients", "mdi:food-apple", "Ingrédients"], ["shopping", "mdi:cart-outline", "Courses"], ["stats", "mdi:chart-box-outline", "Stats"]];
+    else body = ({ week: this._weekView, recipes: this._recipesView, ingredients: this._ingView, shopping: this._shopView, reminders: this._remindersView, stats: this._statsView }[this._tab] || this._weekView).call(this);
+    const tabs = [["week", "mdi:calendar-week", "Semaine"], ["recipes", "mdi:book-open-page-variant", "Recettes"], ["ingredients", "mdi:food-apple", "Ingrédients"], ["shopping", "mdi:cart-outline", "Courses"], ["reminders", "mdi:bell-outline", "Rappels"], ["stats", "mdi:chart-box-outline", "Stats"]];
     const nShop = s ? (s.shopping.items || []).filter((i) => !i.checked).length : 0;
     const keepModal = this.shadowRoot.querySelector(".modal-root");
     this.shadowRoot.innerHTML = `<style>${CSS}</style>
@@ -173,6 +179,7 @@ class HolmMyMenuCard extends HTMLElement {
       case "week-prev": this._week = addDays(this._week, -7); return this._render();
       case "week-next": this._week = addDays(this._week, 7); return this._render();
       case "week-now": this._week = monday(new Date()); return this._render();
+      case "calendar-export": return this._calendarModal();
       case "slot": return this._slotModal(d.day, d.slot);
       case "recipe": return this._recipeModal(d.id);
       case "add-recipe": return this._addRecipeModal();
@@ -181,6 +188,11 @@ class HolmMyMenuCard extends HTMLElement {
       case "stats-refresh": this._stats = null; return this._render();
       case "ing": return this._ingModal(d.id);
       case "add-ing": return this._addIngModal(this._q.ingredients || "");
+      case "reminder-add": return this._reminderModal();
+      case "reminder-edit": return this._reminderModal(d.id);
+      case "reminder-test": return this._do(this._ws("reminder/test", {reminder_id:d.id}), "Test du rappel effectué");
+      case "reminder-toggle": { const r=(this._s.reminders||[]).find(x=>x.id===d.id); if(r) return this._ws("reminder/save",{reminder_id:r.id,reminder:{...r,enabled:!r.enabled}}); return; }
+      case "reminder-delete": if(confirm("Supprimer ce rappel ?")) return this._ws("reminder/delete",{reminder_id:d.id}); return;
       case "shop-gen": {
         const st = this._shopWeek || monday(new Date());
         await this._do(this._ws("shopping/generate", { start: iso(st), end: iso(addDays(st, 6)) }), "Liste de courses générée");
@@ -189,7 +201,12 @@ class HolmMyMenuCard extends HTMLElement {
       case "shop-week-prev": this._shopWeek = addDays(this._shopWeek || monday(new Date()), -7); return this._render();
       case "shop-week-next": this._shopWeek = addDays(this._shopWeek || monday(new Date()), 7); return this._render();
       case "shop-toggle": return this._ws("shopping/toggle", { item_id: d.id });
+      case "shop-toggle-group": return this._ws("shopping/toggle_group", { item_ids: JSON.parse(d.ids) });
       case "shop-del": e.stopPropagation(); return this._ws("shopping/remove", { item_id: d.id });
+      case "shop-del-group": e.stopPropagation(); return this._ws("shopping/remove_group", { item_ids: JSON.parse(d.ids) });
+      case "shop-edit": e.stopPropagation(); return this._shopEdit(JSON.parse(d.ids));
+      case "shop-category": return this._categoryModal();
+      case "shop-restore": return this._restoreShopModal();
       case "shop-clear-checked": return this._ws("shopping/remove", { checked_only: true });
       case "shop-clear": if (confirm("Vider toute la liste de courses ?")) return this._ws("shopping/remove", {}); return;
       case "shop-share": return this._shareModal();
@@ -221,7 +238,8 @@ class HolmMyMenuCard extends HTMLElement {
     return `<div class="bar"><button class="ib" data-act="week-prev"><ha-icon icon="mdi:chevron-left"></ha-icon></button>
         <div class="wk">Semaine du ${fdate(w0, { day: "numeric", month: w0.getMonth() === w1.getMonth() ? undefined : "short" })} au ${fdate(w1, { day: "numeric", month: "long" })}</div>
         <button class="ib" data-act="week-next"><ha-icon icon="mdi:chevron-right"></ha-icon></button>
-        <button class="pill" data-act="week-now">Aujourd'hui</button></div>
+        <button class="pill" data-act="week-now">Aujourd'hui</button>
+        <button class="pill" data-act="calendar-export"><ha-icon icon="mdi:calendar-plus"></ha-icon>Ajouter au calendrier</button></div>
       <div class="week">${days.map((d) => { const k = iso(d); return `<div class="day ${k === today ? "today" : ""} ${k < today ? "past" : ""}">
           <div class="dn"><b>${fdate(d, { weekday: "short" })}</b><span>${d.getDate()}</span></div>
           ${this._viewSlots().map((sl) => this._slotHtml(k, sl)).join("")}</div>`; }).join("")}</div>
@@ -258,10 +276,109 @@ class HolmMyMenuCard extends HTMLElement {
     return `<div class="bar"><button class="ib" data-act="week-prev"><ha-icon icon="mdi:chevron-left"></ha-icon></button>
         <div class="wk">Semaine du ${fdate(w0, { day: "numeric", month: w0.getMonth() === w1.getMonth() ? undefined : "short" })} au ${fdate(w1, { day: "numeric", month: "long" })}</div>
         <button class="ib" data-act="week-next"><ha-icon icon="mdi:chevron-right"></ha-icon></button>
-        ${iso(w0) === iso(monday(new Date())) ? "" : `<button class="pill" data-act="week-now">Aujourd'hui</button>`}</div>
+        ${iso(w0) === iso(monday(new Date())) ? "" : `<button class="pill" data-act="week-now">Aujourd'hui</button>`}
+        <button class="pill" data-act="calendar-export"><ha-icon icon="mdi:calendar-plus"></ha-icon>Ajouter au calendrier</button></div>
       <div class="weekro n${slots.length}">${days.map((d) => { const k = iso(d); return `<div class="rday ${k === today ? "today" : ""} ${k < today ? "past" : ""}">
           <div class="rdn"><b>${fdate(d, { weekday: "long" })}</b><span>${d.getDate()}</span></div>
           <div class="rsl">${slots.map((sl) => this._tile(k, sl, true)).join("")}</div></div>`; }).join("")}</div>`;
+  }
+
+  // ---------------- Export calendrier (déclenché manuellement) ----------------
+  _calendarModal() {
+    const w0 = this._week, start = iso(w0), end = iso(addDays(w0, 6));
+    const calendars = Object.values(this._hass.states || {})
+      .filter((e) => e.entity_id.startsWith("calendar.") && e.state !== "unavailable")
+      .sort((a, b) => (a.attributes.friendly_name || a.entity_id).localeCompare(b.attributes.friendly_name || b.entity_id));
+    const savedCalendar = load("holm-mymenu-calendar-target", "");
+    const prefix = load("holm-mymenu-calendar-prefix", "HOLM - ");
+    const preview = [];
+    for (let i = 0; i < 7; i++) {
+      const day = iso(addDays(w0, i)), slots = this._s.plan[day] || {};
+      for (const [slot, hour] of [["midi", "12h–13h"], ["soir", "19h–20h"]]) {
+        const recipes = (slots[slot] || []).filter(e => e.type === "recipe")
+          .map(e => this._s.recipes[e.recipe_id]).filter(Boolean);
+        if (recipes.length) preview.push({ day, slot, hour, names: recipes.map(r => r.name) });
+      }
+    }
+    const mb = this._modal("Ajouter les recettes au calendrier", `
+      <div class="muted">Semaine du ${esc(fdate(w0, { day: "numeric", month: "long" }))} au ${esc(fdate(addDays(w0, 6), { day: "numeric", month: "long" }))}</div>
+      <div class="sh" style="margin-top:14px">Calendrier de destination</div>
+      <select class="f cal-target" style="width:100%">
+        <option value="">Choisir un calendrier…</option>
+        ${calendars.map(c => `<option value="${esc(c.entity_id)}" ${savedCalendar === c.entity_id ? "selected" : ""}>${esc(c.attributes.friendly_name || c.entity_id)} (${esc(c.entity_id)})</option>`).join("")}
+      </select>
+      ${!calendars.length ? `<div class="muted">Aucun calendrier Home Assistant disponible.</div>` : ""}
+      <div class="sh" style="margin-top:14px">Préfixe des événements</div>
+      <input class="f cal-prefix" style="width:100%;box-sizing:border-box" maxlength="80" placeholder="Ex. HOLM - " value="${esc(prefix)}">
+      <div class="sh" style="margin-top:16px">Aperçu · ${preview.length} événement${preview.length > 1 ? "s" : ""}</div>
+      <div style="max-height:260px;overflow:auto">
+        ${preview.length ? preview.map(p => `<div style="padding:9px 0;border-bottom:1px solid var(--divider-color)">
+          <b>${esc(fdate(new Date(p.day + "T12:00:00"), { weekday: "long", day: "numeric", month: "short" }))} · ${p.slot === "midi" ? "Midi" : "Soir"} (${p.hour})</b>
+          <div class="muted">${esc(p.names.join(" · "))}</div></div>`).join("") : `<div class="muted">Aucune recette planifiée cette semaine.</div>`}
+      </div>
+      <div class="muted" style="margin-top:12px">La synchronisation recherche les événements HOLM déjà présents et évite les doublons. Les modifications et suppressions nécessitent des services pris en charge par le calendrier.</div>
+      <div class="sh" style="margin-top:14px">Mode d’export</div>
+      <select class="f cal-mode" style="width:100%"><option value="sync">Synchroniser la semaine (ajouter, modifier, supprimer)</option><option value="missing">Ajouter uniquement les événements manquants</option></select>
+      <div class="cal-confirm" hidden style="margin-top:16px;padding:16px;border:1px solid var(--divider-color);border-radius:16px;background:var(--secondary-background-color)">
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <ha-icon icon="mdi:calendar-sync" style="color:var(--primary-color);flex-shrink:0;margin-top:2px"></ha-icon>
+          <div>
+            <div style="font-weight:700;font-size:1.05em">Confirmer la synchronisation</div>
+            <div class="muted" style="margin-top:6px;line-height:1.5">Les événements HOLM de cette semaine seront mis à jour. Ceux qui correspondent à des repas supprimés pourront être effacés du calendrier sélectionné. Les autres événements ne seront pas touchés.</div>
+            <div class="muted cal-confirm-target" style="margin-top:10px;font-weight:600"></div>
+          </div>
+        </div>
+        <div class="row end" style="margin-top:16px;gap:8px;flex-wrap:wrap">
+          <button class="pill" data-x="back-confirm"><ha-icon icon="mdi:arrow-left"></ha-icon>Retour</button>
+          <button class="pill main" data-x="confirm-sync"><ha-icon icon="mdi:check"></ha-icon>Confirmer la synchronisation</button>
+        </div>
+      </div>
+      <div class="row end cal-actions" style="margin-top:16px"><button class="pill" data-x="cancel">Annuler</button>
+        <button class="pill main" data-x="create" ${!preview.length || !calendars.length ? "disabled" : ""}><ha-icon icon="mdi:calendar-plus"></ha-icon>Créer ${preview.length} événement${preview.length > 1 ? "s" : ""}</button></div>
+    `, { wide: true });
+    mb.querySelector('[data-x="cancel"]').addEventListener("click", () => this._close());
+    const confirmPanel = mb.querySelector(".cal-confirm");
+    const actionRow = mb.querySelector(".cal-actions");
+    confirmPanel.style.display = "none";
+    const btn = mb.querySelector('[data-x="create"]');
+    let request = null;
+    const runExport = async (confirm_delete) => {
+      if (!request) return;
+      const confirmBtn = mb.querySelector('[data-x="confirm-sync"]');
+      btn.disabled = true;
+      confirmBtn.disabled = true;
+      try {
+        const result = await this._ws("calendar/export", { ...request, confirm_delete });
+        this._toast(`Calendrier : ${result.created} créé(s), ${result.updated} modifié(s), ${result.deleted} supprimé(s), ${result.unchanged} inchangé(s)`);
+        this._close();
+      } catch (e) {
+        this._toast(`Export calendrier : ${e.message || e}`);
+        btn.disabled = false;
+        confirmBtn.disabled = false;
+      }
+    };
+    mb.querySelector('[data-x="back-confirm"]').addEventListener("click", () => {
+      confirmPanel.style.display = "none";
+      actionRow.style.display = "flex";
+      request = null;
+    });
+    mb.querySelector('[data-x="confirm-sync"]').addEventListener("click", () => runExport(true));
+    mb.querySelector('[data-x="create"]').addEventListener("click", async () => {
+      const target = mb.querySelector(".cal-target").value;
+      const pfx = mb.querySelector(".cal-prefix").value;
+      if (!target) { this._toast("Sélectionne un calendrier"); return; }
+      save("holm-mymenu-calendar-target", target);
+      save("holm-mymenu-calendar-prefix", pfx);
+      const mode = mb.querySelector(".cal-mode").value;
+      request = { entity_id: target, start, end, prefix: pfx, mode };
+      if (mode === "sync") {
+        mb.querySelector(".cal-confirm-target").textContent = `Calendrier : ${calendars.find(c => c.entity_id === target)?.attributes?.friendly_name || target}`;
+        confirmPanel.style.display = "block";
+        actionRow.style.display = "none";
+        return;
+      }
+      await runExport(false);
+    });
   }
 
   // ---------------- Recettes ----------------
@@ -352,40 +469,215 @@ class HolmMyMenuCard extends HTMLElement {
       </div>`;
   }
 
+  // ---------------- Rappels ----------------
+  // Les rappels sont stockés côté intégration. Le formulaire ne doit jamais
+  // être reconstruit pendant sa saisie (voir _update et _editingReminder).
+  // Rappels persistants : l'onglet lit les données du Store HA ; les tests
+  // n'effacent ni les réglages ni les messages de courses Telegram.
+  _remindersView() {
+    const list = this._s.reminders || [];
+    return `<div class="bar"><h3 style="flex:1;margin:0">🔔 Mes rappels</h3><button class="pill main" data-act="reminder-add"><ha-icon icon="mdi:plus"></ha-icon>Nouveau rappel</button></div>
+      <div class="muted" style="margin:8px 0 14px">Rappels ponctuels ou récurrents · Heure locale Home Assistant · Notifications Telegram et mobiles</div>
+      ${list.length ? list.map(r=>`<div class="rem-row"><div class="rem-text"><b>${({shopping:"🛒",planning:"📅",recipe:"🍳",custom:"🔔"})[r.kind]||"🔔"} ${esc(r.title)}</b><small>${esc(r.frequency==="weekly"?"Hebdomadaire":r.frequency==="daily"?"Quotidien":"Une fois")} · ${esc(r.time)}${r.frequency==="once"?" · "+esc(r.date):""} · ${r.enabled?"Actif":"En pause"}</small><small>${esc(r.last_status||"Aucun envoi")}</small></div><div class="rem-actions"><button class="ib" data-act="reminder-toggle" data-id="${r.id}" title="Activer ou suspendre"><ha-icon icon="mdi:${r.enabled?"bell-ring":"bell-off"}"></ha-icon></button><button class="ib" data-act="reminder-test" data-id="${r.id}" title="Tester"><ha-icon icon="mdi:send-check"></ha-icon></button><button class="ib" data-act="reminder-edit" data-id="${r.id}" title="Modifier"><ha-icon icon="mdi:pencil"></ha-icon></button><button class="ib" data-act="reminder-delete" data-id="${r.id}" title="Supprimer"><ha-icon icon="mdi:delete-outline"></ha-icon></button></div></div>`).join("") : `<div class="empty">Aucun rappel. Créez votre premier rappel pour les courses, les menus, les recettes ou une tâche personnalisée.</div>`}`;
+  }
+  // Formulaire de rappel : protéger les champs contre les rerenders Lovelace
+  // et empêcher qu'un clic sur le fond ne ferme une saisie non enregistrée.
+  // RAPPELS : conserver la saisie pendant les mises à jour HA ; un clic sur le fond ne ferme pas le formulaire.
+  _reminderModal(id=null) {
+    const r=(this._s.reminders||[]).find(x=>x.id===id)||{};
+    const input=(label,key,type="text",value="")=>`<label class="rem-field">${label}<input class="f" data-key="${key}" type="${type}" value="${esc(String(r[key]??value))}"></label>`;
+    const devices=Object.keys(this._hass.states).filter(e=>e.startsWith("notify.") && ((this._hass.entities||{})[e]||{}).platform!=="smtp").map(e=>[e,this._hass.states[e].attributes.friendly_name||e]).sort((a,b)=>a[1].localeCompare(b[1],"fr"));
+    const selectedDevices=new Set(r.notify_entities|| (r.notify_service?[r.notify_service]:[]));
+    const contacts=(this._s.contacts||[]).filter(c=>c.email);
+    const selectedEmails=new Set(r.emails||[]);
+    const savedTargets=load("holm-mymenu-telegram-targets-v2",[]);
+    const tgKey=t=>String(t.chat_id)+":"+String(t.thread_id||"");
+    const selectedTargets=new Set((r.telegram_targets||[]).map(tgKey));
+    const mb=this._modal(id?"Modifier le rappel":"Nouveau rappel",`<div class="rem-form">
+      ${input("Titre", "title", "text", "Courses de la semaine")}
+      <label class="rem-field">Type<select class="f" data-key="kind">${[["shopping","🛒 Courses"],["planning","📅 Menus incomplets"],["recipe","🍳 Préparation / recette"],["custom","🔔 Personnalisé"]].map(([v,l])=>`<option value="${v}" ${r.kind===v?"selected":""}>${l}</option>`).join("")}</select></label>
+      <div class="rem-kind-help muted small2" role="status" aria-live="polite"></div>
+      <label class="rem-field">Fréquence<select class="f" data-key="frequency">${[["once","Une fois"],["daily","Chaque jour"],["weekly","Chaque semaine"]].map(([v,l])=>`<option value="${v}" ${r.frequency===v||(!r.frequency&&v==="weekly")?"selected":""}>${l}</option>`).join("")}</select></label>
+      ${input("Heure", "time", "time", "18:00")}
+      <div data-frequency="once">${input("Date du rappel", "date", "date", iso(new Date()))}</div>
+      <div data-frequency="weekly"><label class="rem-field">Jours de rappel<div class="rem-days">${["L","M","M","J","V","S","D"].map((d,i)=>`<label><input type="checkbox" data-day="${i}" ${(r.days||[4]).includes(i)?"checked":""}>${d}</label>`).join("")}</div></label></div>
+      <div data-kind="recipe custom"><label class="rem-field">Message / consigne<textarea class="f" data-key="message" rows="3">${esc(r.message||"")}</textarea></label></div>
+      <div class="sh">📱 Notifications mobiles Home Assistant</div>
+      <div class="muted small2">Envoie une notification push aux téléphones ou tablettes sélectionnés. Les appareils sont repris des entités de notification Home Assistant.</div>
+      ${devices.length?`<div class="dlist">${devices.map(([e,n])=>`<label class="chip"><input type="checkbox" data-notify="${esc(e)}" ${selectedDevices.has(e)?"checked":""}>${esc(n)}</label>`).join("")}</div>`:`<div class="muted">Aucune entité notify disponible.</div>`}
+      <div class="sh">✈️ Telegram</div>
+      <div class="muted small2">Envoie un message de rappel dans les conversations ou sujets déjà configurés pour la liste de courses. Il ne remplace pas le message interactif des courses.</div>
+      ${savedTargets.length?`<div class="clist">${savedTargets.map((t,i)=>`<label class="ct"><input type="checkbox" data-telegram="${i}" ${selectedTargets.has(tgKey(t))?"checked":""}><span class="cn">Conversation ${esc(t.chat_id)}${t.thread_id?` · Sujet ${esc(t.thread_id)}`:""}</span></label>`).join("")}</div>`:`<div class="muted">Aucune conversation enregistrée. Configure d'abord Telegram dans « Envoyer la liste de courses ».</div>`}
+      <div class="sh">✉️ E-mail</div>
+      <div class="muted small2">Envoie le rappel par e-mail avec le serveur SMTP configuré dans Home Assistant. Sélectionne des contacts du carnet ou saisis d'autres adresses.</div>
+      ${contacts.length?`<div class="clist">${contacts.map(c=>`<label class="ct"><input type="checkbox" data-email="${esc(c.email)}" ${selectedEmails.has(c.email)?"checked":""}><span class="cn">${esc(c.name)} · ${esc(c.email)}</span></label>`).join("")}</div>`:""}
+      <label class="rem-field">Autres adresses e-mail (une par ligne)<textarea class="f" data-key="emails" rows="2" placeholder="exemple@domaine.fr">${esc((r.emails||[]).filter(e=>!contacts.some(c=>c.email===e)).join("\n"))}</textarea></label>
+      <div data-kind="shopping planning"><label><input type="checkbox" data-key="only_if_needed" ${r.only_if_needed!==false?"checked":""}> Envoyer uniquement si nécessaire</label><div class="muted small2">Courses : uniquement s'il reste des articles. Menus : uniquement si des repas ne sont pas planifiés.</div></div>
+      <label><input type="checkbox" data-key="enabled" ${r.enabled!==false?"checked":""}> Rappel actif</label>
+      <div class="bar" style="justify-content:flex-end"><button class="pill" data-cancel>Annuler</button><button class="pill main" data-save>Enregistrer</button></div>
+      </div>`, {dismissOnBackdrop:false});
+    // Empêche le rafraîchissement de la carte de détruire le formulaire ouvert.
+    // Le clic sur le fond est désactivé via dismissOnBackdrop:false dans _modal.
+    this._editingReminder = true;
+    // Évite que les interactions du formulaire déclenchent des actions Lovelace.
+    const reminderDialog = mb.closest(".mdl");
+    const stopPropagation = event => event.stopPropagation();
+    for (const eventName of ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "dblclick", "touchstart", "touchend"]) {
+      reminderDialog.addEventListener(eventName, stopPropagation);
+    }
+    const kindHelp = {
+      shopping: "🛒 Courses : vérifie les articles restant à acheter. Avec « Envoyer uniquement si nécessaire », aucun rappel n'est envoyé si la liste est terminée.",
+      planning: "📅 Menus : vérifie les repas non planifiés sur les sept prochains jours. Avec « Envoyer uniquement si nécessaire », aucun rappel n'est envoyé si tous les menus sont complets.",
+      recipe: "🍳 Préparation : envoie la consigne saisie ci-dessous au moment choisi (par exemple « Décongeler le poulet »). Le délai n'est pas calculé automatiquement depuis la recette.",
+      custom: "🔔 Personnalisé : envoie le texte saisi ci-dessous à l'heure programmée (par exemple « Acheter les pommes de terre à la ferme »), indépendamment des courses et des menus."
+    };
+    // Affiche uniquement les champs pertinents selon le type et la fréquence.
+    // L'aide est contextuelle : elle explique les quatre types de rappels.
+    const refresh = () => {
+      const frequency = mb.querySelector('[data-key="frequency"]').value;
+      const kind = mb.querySelector('[data-key="kind"]').value;
+      for (const field of mb.querySelectorAll('[data-frequency]')) {
+        field.hidden = field.dataset.frequency !== frequency;
+      }
+      for (const field of mb.querySelectorAll('[data-kind]')) {
+        field.hidden = !field.dataset.kind.split(" ").includes(kind);
+      }
+      mb.querySelector(".rem-kind-help").textContent = kindHelp[kind] || "";
+    };
+    mb.querySelector('[data-key="frequency"]').onchange=refresh;
+    mb.querySelector('[data-key="kind"]').onchange=refresh;
+    refresh();
+    mb.querySelector('[data-cancel]').onclick=()=>this._close();
+    mb.querySelector('[data-save]').onclick=async()=>{
+      const v=k=>mb.querySelector(`[data-key="${k}"]`)?.value||"";
+      const telegram_targets=[...mb.querySelectorAll('[data-telegram]:checked')].map(x=>savedTargets[Number(x.dataset.telegram)]).map(t=>({chat_id:Number(t.chat_id),thread_id:t.thread_id?Number(t.thread_id):null}));
+      const notify_entities=[...mb.querySelectorAll('[data-notify]:checked')].map(x=>x.dataset.notify);
+      const emails=[...new Set([...mb.querySelectorAll('[data-email]:checked')].map(x=>x.dataset.email).concat(v("emails").split(/[\n,;]/).map(x=>x.trim()).filter(Boolean)))];
+      const reminder={title:v("title"),kind:v("kind"),frequency:v("frequency"),time:v("time"),date:v("date"),days:[...mb.querySelectorAll('[data-day]:checked')].map(x=>Number(x.dataset.day)),message:v("message"),notify_service:"",notify_entities,emails,telegram_targets,only_if_needed:mb.querySelector('[data-key="only_if_needed"]').checked,enabled:mb.querySelector('[data-key="enabled"]').checked};
+      try {await this._ws("reminder/save",{reminder,...(id?{reminder_id:id}:{})});this._close();this._toast("Rappel enregistré");}catch(e){this._toast(e.message||String(e));}
+    };
+  }
+
   // ---------------- Courses ----------------
+  // Liste de courses : regroupement visuel, modification/suppression sur une
+  // seule ligne et rayons personnalisés ; ne pas modifier les recettes sources.
+  // COURSES : les lignes regroupées conservent les IDs des ingrédients issus des recettes.
   _shopView() {
     const s = this._s, sh = s.shopping || {}, items = sh.items || [];
     const w0 = this._shopWeek || monday(new Date()), w1 = addDays(w0, 6);
-    const groups = s.aisles.map(([k, l]) => [l, items.filter((i) => (i.aisle || "autre") === k)]).filter((g) => g[1].length);
+    const viewItems = sh.groups || items;
+    const groups = s.aisles.map(([k, l]) => [l, viewItems.filter((i) => (i.aisle || "autre") === k)]).filter((g) => g[1].length);
     const done = items.filter((i) => i.checked).length;
     const rng = sh.range ? `Générée pour la semaine du ${fdate(new Date(sh.range.start + "T00:00"), { day: "numeric", month: "short" })}` : "";
     return `<div class="bar"><button class="ib" data-act="shop-week-prev"><ha-icon icon="mdi:chevron-left"></ha-icon></button>
         <div class="wk">Semaine du ${fdate(w0, { day: "numeric", month: "short" })} au ${fdate(w1, { day: "numeric", month: "short" })}</div>
         <button class="ib" data-act="shop-week-next"><ha-icon icon="mdi:chevron-right"></ha-icon></button>
         <button class="pill main" data-act="shop-gen"><ha-icon icon="mdi:cart-arrow-down"></ha-icon>Générer</button></div>
-      <div class="bar"><input class="shop-add" placeholder="Ajouter un article (Entrée)…"></div>
+      <div class="bar"><input class="shop-add" placeholder="Ajouter un article (Entrée)…"><button class="pill" data-act="shop-category"><ha-icon icon="mdi:shape-plus"></ha-icon>Rayons</button>${(sh.excluded || []).length ? `<button class="pill" data-act="shop-restore" title="Voir et restaurer les articles retirés">Articles retirés (${sh.excluded.length})</button>` : ""}</div>
       ${items.length ? `<div class="shopmeta">${rng}${rng ? " · " : ""}${done}/${items.length} pris
           ${done ? `<button class="lnk" data-act="shop-clear-checked">Retirer les articles pris</button>` : ""}</div>
-        <div class="row act shopact"><button class="pill" data-act="shop-share"><ha-icon icon="mdi:email-outline"></ha-icon>Envoyer par mail</button><button class="pill" data-act="shop-copy"><ha-icon icon="mdi:content-copy"></ha-icon>Copier</button><button class="pill danger" data-act="shop-clear"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Vider la liste</button></div>
+        <div class="row act shopact"><button class="pill" data-act="shop-share"><ha-icon icon="mdi:send-outline"></ha-icon>Envoyer (mail / Telegram)</button><button class="pill" data-act="shop-copy"><ha-icon icon="mdi:content-copy"></ha-icon>Copier</button><button class="pill danger" data-act="shop-clear"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Vider la liste</button></div>
         ${groups.map(([l, its]) => `<div class="grp"><div class="gh">${esc(l)}<em>${its.filter((i) => !i.checked).length}</em></div>
-          ${its.sort((a, b) => a.checked - b.checked || a.name.localeCompare(b.name, "fr")).map((i) => `<div class="si ${i.checked ? "ck" : ""}" data-act="shop-toggle" data-id="${i.id}" title="${esc((i.sources || []).join(", "))}">
+          ${its.sort((a, b) => a.checked - b.checked || a.name.localeCompare(b.name, "fr")).map((i) => `<div class="si ${i.checked ? "ck" : ""}" data-act="shop-toggle-group" data-ids='${JSON.stringify(i.ids || [i.id])}' title="${esc((i.items || [i]).flatMap(x => x.sources || []).join(", "))}">
             <span class="cb"><ha-icon icon="mdi:check"></ha-icon></span><b>${esc(i.name)}</b><span class="q">${esc(i.display || "")}</span>
-            ${i.sources && i.sources.length ? `<small>${esc(i.sources.slice(0, 2).join(", "))}${i.sources.length > 2 ? "…" : ""}</small>` : i.manual ? `<small>ajouté</small>` : "<small></small>"}
-            <button class="x" data-act="shop-del" data-id="${i.id}"><ha-icon icon="mdi:close"></ha-icon></button></div>`).join("")}</div>`).join("")}`
+            ${(i.items || [i]).some(x => x.sources?.length) ? `<small>${esc([...new Set((i.items || [i]).flatMap(x => x.sources || []))].slice(0, 2).join(", "))}</small>` : (i.items || [i]).some(x => x.manual) ? `<small>ajouté</small>` : "<small></small>"}
+            <button class="ib" data-act="shop-edit" data-ids='${JSON.stringify(i.ids || [i.id])}' title="Modifier"><ha-icon icon="mdi:pencil-outline"></ha-icon></button><button class="x" data-act="shop-del-group" data-ids='${JSON.stringify(i.ids || [i.id])}' ><ha-icon icon="mdi:close"></ha-icon></button></div>`).join("")}</div>`).join("")}`
       : `<div class="empty">La liste est vide. Choisissez une semaine et touchez <b>Générer</b> : les ingrédients des repas prévus sont additionnés et rangés par rayon.</div>`}`;
   }
 
+  _restoreShopModal() {
+    const sh = this._s.shopping || {};
+    const excluded = sh.excluded || [];
+    const details = sh.excluded_details || {};
+    const mb = this._modal("Articles retirés", `
+      <div class="muted">Ces articles ne seront pas ajoutés à nouveau lors de la génération de cette semaine. Les recettes restent inchangées.</div>
+      <div class="clist">${excluded.map(key => {
+        const item = details[key] || {};
+        const name = item.name || key.split("|")[0];
+        return `<div class="ct" style="display:flex;align-items:center;gap:12px;padding:10px 12px">
+          <span class="cn grow"><b>${esc(name)}</b>${item.display ? `<small>${esc(item.display)}</small>` : ""}</span>
+          <button class="pill" data-restore="${esc(key)}"><ha-icon icon="mdi:backup-restore"></ha-icon>Restaurer</button>
+        </div>`;
+      }).join("")}</div>
+      <div class="row end"><button class="pill" data-all>Tout restaurer</button><button class="pill main" data-close>Terminer</button></div>
+      <small>Les articles restaurés réapparaîtront à la prochaine génération de la liste.</small>`);
+    mb.querySelectorAll("[data-restore]").forEach(btn => btn.addEventListener("click", async () => {
+      await this._ws("shopping/restore", {keys: [btn.dataset.restore]});
+      this._toast("Article réautorisé pour la prochaine génération");
+      this._close();
+    }));
+    mb.querySelector("[data-all]").addEventListener("click", async () => {
+      await this._ws("shopping/restore", {});
+      this._toast("Tous les articles sont réautorisés pour la prochaine génération");
+      this._close();
+    });
+    mb.querySelector("[data-close]").addEventListener("click", () => this._close());
+  }
+
+  // RAYONS : création et modification depuis les courses et les fiches ingrédients.
+  _categoryModal(onCreated = null) {
+    const s = this._s;
+    const mb = this._modal("Gérer les rayons", `
+      <div class="sh">Catégories personnalisées</div>
+      ${(s.custom_aisles || []).map(a => `<div class="row"><span class="grow">${esc(a.icon || "🟣")} ${esc(a.name)}</span><button class="pill" data-edit="${esc(a.id)}">Modifier</button><button class="pill danger" data-del="${esc(a.id)}">Supprimer</button></div>`).join("") || '<div class="muted">Aucune catégorie personnalisée.</div>'}
+      <div class="sh">Nouvelle catégorie</div>
+      <div class="row"><input class="f grow" data-newname placeholder="Ex. Bricolage"><input class="f" data-newicon value="🟣" maxlength="8" style="max-width:75px"><button class="pill main" data-create>Créer</button></div>
+      <small>Les rayons standards restent disponibles. La suppression déplace les articles vers Divers.</small>`);
+    mb.querySelector('[data-create]').addEventListener('click', async () => {
+      const name = mb.querySelector('[data-newname]').value.trim(), icon = mb.querySelector('[data-newicon]').value.trim();
+      if (!name) return this._toast("Indique un nom de rayon");
+      try { const a = await this._ws('aisle/create', {name, icon}); this._close(); if (onCreated) onCreated(a.id); else this._toast("Rayon créé"); } catch(e) { this._toast(e.message || String(e)); }
+    });
+    mb.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', async () => {
+      const a = s.custom_aisles.find(x => x.id === b.dataset.edit);
+      const name = prompt('Nom du rayon', a.name); if (name === null) return;
+      const icon = prompt('Pastille ou emoji', a.icon || '🟣'); if (icon === null) return;
+      try { await this._ws('aisle/update', {aisle_id:a.id,name,icon}); this._categoryModal(onCreated); } catch(e) {this._toast(e.message || String(e));}
+    }));
+    mb.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm('Supprimer ce rayon ? Ses articles seront déplacés vers Divers.')) return;
+      try { await this._ws('aisle/delete', {aisle_id:b.dataset.del}); this._categoryModal(onCreated); } catch(e) {this._toast(e.message || String(e));}
+    }));
+  }
+  // ÉDITION : modifier un article sans changer la recette qui l’a généré.
+  _shopEdit(ids) {
+    const originals = (this._s.shopping.items || []).filter(i => ids.includes(i.id));
+    if (!originals.length) return;
+    const group = (this._s.shopping.groups || []).find(g => JSON.stringify(g.ids) === JSON.stringify(ids));
+    const item = originals[0];
+    const mb = this._modal("Modifier un article", `
+      <label class="fl">Article<input class="f" data-f="name" value="${esc(group?.name || item.name)}"></label>
+      ${ids.length === 1 ? `<label class="fl">Quantité affichée<input class="f" data-f="display" value="${esc(item.display || '')}"></label>` : `<small>Quantités regroupées : modifier les quantités dans les recettes sources pour éviter de les compter plusieurs fois.</small>`}
+      <label class="fl">Rayon<select class="f" data-f="aisle">${this._s.aisles.map(([k,l]) => `<option value="${esc(k)}" ${k === item.aisle ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      <div class="row"><button class="pill" data-newrayon>+ Nouveau rayon</button><button class="pill main" data-save>Enregistrer</button></div>
+      <small>Les modifications ne changent pas les recettes d'origine.</small>`);
+    mb.querySelector('[data-newrayon]').addEventListener('click', () => this._categoryModal(() => this._shopEdit(ids)));
+    mb.querySelector('[data-save]').addEventListener('click', async () => {
+      const changes = {}; mb.querySelectorAll('[data-f]').forEach(f => changes[f.dataset.f] = f.value.trim());
+      if (!changes.name) return this._toast('Nom requis');
+      try { await this._ws('shopping/update', {item_ids:ids, changes}); this._close(); } catch(e) {this._toast(e.message || String(e));}
+    });
+  }
+
+  // PARTAGE : conserver la période sélectionnée et les quantités de la liste.
   _shopText(withChecked = false) {
-    const s = this._s, sh = s.shopping || {}, items = (sh.items || []).filter((i) => withChecked || !i.checked);
+    const s = this._s, sh = s.shopping || {}, items = (sh.groups || sh.items || []).filter((i) => withChecked || !i.checked);
     const head = sh.range ? `Liste de courses — semaine du ${fdate(new Date(sh.range.start + "T00:00"), { day: "numeric", month: "long" })}` : "Liste de courses";
     const parts = s.aisles.map(([k, l]) => [l, items.filter((i) => (i.aisle || "autre") === k)]).filter((g) => g[1].length)
       .map(([l, its]) => `${l.toUpperCase()}\n${its.sort((a, b) => a.name.localeCompare(b.name, "fr")).map((i) => `- ${i.name}${i.display ? ` : ${i.display}` : ""}`).join("\n")}`);
     return `${head}\n\n${parts.join("\n\n") || "(liste vide)"}\n\n— HOLM My Menu`;
   }
   _shareModal() {
-    const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || "null") || d; } catch (_) { return d; } };
-    const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
     const selC = new Set(load("holm-mymenu-to", [])), selE = new Set(load("holm-mymenu-devices", []));
+    let telegramTargets = load("holm-mymenu-telegram-targets-v2", []);
+    if (!Array.isArray(telegramTargets)) telegramTargets = [];
+    // Keep target selection independent from the stored Telegram address book.
+    const tgKey = (t) => `${t.chat_id}:${t.thread_id || ""}`;
+    const tgSelectionKey = "holm-mymenu-telegram-selected-v1";
+    let tgSelected = load(tgSelectionKey, null);
+    if (!Array.isArray(tgSelected)) tgSelected = telegramTargets.map(tgKey);
+    const selectedTelegram = () => telegramTargets.filter((t) => tgSelected.includes(tgKey(t)));
+    const saveTelegramSelection = () => save(tgSelectionKey, tgSelected);
     let info = null;
     this._ws("mail/info").then((x) => { info = x; draw(); }).catch(() => {});
     const devices = () => Object.keys(this._hass.states).filter((e) => e.startsWith("notify.") && ((this._hass.entities || {})[e] || {}).platform !== "smtp")
@@ -406,10 +698,62 @@ class HolmMyMenuCard extends HTMLElement {
         ${info && !info.smtp ? `<div class="warn">Aucune intégration SMTP n'est configurée dans Home Assistant : utilisez « Ouvrir ma messagerie », ou ajoutez l'intégration SMTP pour envoyer directement.</div>` : info ? `<div class="muted small2">Envoyé par ${esc(info.sender)} (intégration ${esc(info.name)}), en un seul message à toutes les adresses cochées.</div>` : ""}
         ${devs.length ? `<div class="sh">Sur un téléphone ou une tablette (notification)</div>
           <div class="dlist">${devs.map(([e, n]) => `<label class="chip ${selE.has(e) ? "on" : ""}"><input type="checkbox" data-e="${e}" ${selE.has(e) ? "checked" : ""}>${esc(n)}</label>`).join("")}</div>` : ""}
+        <div class="row" style="align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div class="sh">Par Telegram (liste interactive synchronisée)</div>
+          ${telegramTargets.length ? `<label class="chip ${selectedTelegram().length === telegramTargets.length ? "on" : ""}" style="cursor:pointer">
+            <input type="checkbox" data-tgall ${selectedTelegram().length === telegramTargets.length ? "checked" : ""}>
+            Tout sélectionner / désélectionner
+          </label>` : ""}
+        </div>
+        <div class="muted small2">Sélectionne les conversations destinataires. Le numéro du sujet est facultatif.</div>
+        <div class="row addc"><input class="f tg-chat" placeholder="Chat ID (ex. -1001234567890)"><input class="f tg-thread" placeholder="Sujet / thread ID (facultatif)"><button class="pill" data-x="addtg"><ha-icon icon="mdi:plus"></ha-icon>Ajouter</button></div>
+        ${telegramTargets.length ? `<div class="clist">${telegramTargets.map((t, i) => `
+          <div class="ct ${tgSelected.includes(tgKey(t)) ? "on" : ""}" style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+            <label style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer">
+              <input type="checkbox" data-tg="${i}" ${tgSelected.includes(tgKey(t)) ? "checked" : ""}>
+              <span class="av"><ha-icon icon="mdi:telegram"></ha-icon></span>
+              <span class="cn" style="min-width:0">
+                <b style="display:block">Conversation Telegram</b>
+                <small style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px">
+                  <span><ha-icon icon="mdi:account-group-outline" style="--mdc-icon-size:16px;vertical-align:middle"></ha-icon> Chat ID : <strong>${esc(String(t.chat_id))}</strong></span>
+                  ${t.thread_id ? `<span><ha-icon icon="mdi:forum-outline" style="--mdc-icon-size:16px;vertical-align:middle"></ha-icon> Sujet : <strong>${esc(String(t.thread_id))}</strong></span>` : `<span>Sans sujet</span>`}
+                </small>
+              </span>
+            </label>
+            <button class="ib" data-tgdel="${i}" title="Retirer cette conversation"><ha-icon icon="mdi:close"></ha-icon></button>
+          </div>`).join("")}</div>` : ""}
         <div class="row end sendrow"><a class="pill" href="${mailto}"><ha-icon icon="mdi:email-edit-outline"></ha-icon>Ouvrir ma messagerie</a>
-          <button class="pill main" data-x="send" ${selC.size || selE.size ? "" : "disabled"}><ha-icon icon="mdi:send"></ha-icon>Envoyer${selC.size + selE.size ? ` (${selC.size + selE.size})` : ""}</button></div>
+          <button class="pill main" data-x="send" ${selC.size || selE.size || selectedTelegram().length ? "" : "disabled"}><ha-icon icon="mdi:send"></ha-icon>Envoyer${selC.size + selE.size + selectedTelegram().length ? ` (${selC.size + selE.size + selectedTelegram().length})` : ""}</button></div>
         <details class="adv"><summary>Aperçu de la liste</summary><pre class="prev">${esc(text)}</pre></details>`, { wide: true });
       mb.querySelectorAll("input").forEach((x) => { x.addEventListener("keydown", (e) => e.stopPropagation()); x.addEventListener("keyup", (e) => e.stopPropagation()); });
+      mb.querySelector('[data-x="addtg"]').addEventListener("click", () => {
+        const chat = mb.querySelector(".tg-chat").value.trim();
+        const thread = mb.querySelector(".tg-thread").value.trim();
+        if (!/^-?\d+$/.test(chat) || (thread && !/^\d+$/.test(thread))) return this._toast("Identifiant Telegram invalide");
+        if (!telegramTargets.some((t) => t.chat_id === chat && (t.thread_id || "") === thread)) {
+          const target = { chat_id: chat, thread_id: thread };
+          telegramTargets.push(target);
+          tgSelected.push(tgKey(target));
+          save("holm-mymenu-telegram-targets-v2", telegramTargets);
+          saveTelegramSelection();
+        }
+        draw();
+      });
+      mb.querySelectorAll("[data-tgdel]").forEach((b) => b.addEventListener("click", () => {
+        const removed = telegramTargets.splice(Number(b.dataset.tgdel), 1)[0];
+        tgSelected = tgSelected.filter((key) => key !== tgKey(removed));
+        save("holm-mymenu-telegram-targets-v2", telegramTargets);
+        saveTelegramSelection(); draw();
+      }));
+      mb.querySelectorAll("[data-tg]").forEach((x) => x.addEventListener("change", () => {
+        const key = tgKey(telegramTargets[Number(x.dataset.tg)]);
+        tgSelected = x.checked ? [...new Set([...tgSelected, key])] : tgSelected.filter((v) => v !== key);
+        saveTelegramSelection(); draw();
+      }));
+      mb.querySelector("[data-tgall]")?.addEventListener("change", (e) => {
+        tgSelected = e.currentTarget.checked ? telegramTargets.map(tgKey) : [];
+        saveTelegramSelection(); draw();
+      });
       mb.querySelectorAll("[data-c]").forEach((x) => x.addEventListener("change", () => { x.checked ? selC.add(x.dataset.c) : selC.delete(x.dataset.c); save("holm-mymenu-to", [...selC]); draw(); }));
       mb.querySelectorAll("[data-e]").forEach((x) => x.addEventListener("change", () => { x.checked ? selE.add(x.dataset.e) : selE.delete(x.dataset.e); save("holm-mymenu-devices", [...selE]); draw(); }));
       mb.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async (e) => {
@@ -430,9 +774,9 @@ class HolmMyMenuCard extends HTMLElement {
       mb.querySelector('[data-x="send"]').addEventListener("click", async (e) => {
         const btn = e.currentTarget; btn.disabled = true; btn.lastChild.textContent = "Envoi…";
         try {
-          const out = await this._ws("shopping/send", { contacts: [...selC], entities: [...selE] });
-          const n = out.emails.length, d = out.entities.length;
-          this._toast(`Liste envoyée${n ? ` à ${n} adresse${n > 1 ? "s" : ""}` : ""}${n && d ? " et" : ""}${d ? ` à ${d} appareil${d > 1 ? "s" : ""}` : ""}`);
+          const out = await this._ws("shopping/send", { contacts: [...selC], entities: [...selE], telegram_targets: selectedTelegram() });
+          const n = out.emails.length, d = out.entities.length, t = (out.telegram_targets || []).length;
+          this._toast(`Liste envoyée${n ? ` à ${n} adresse${n > 1 ? "s" : ""}` : ""}${n && d ? " et" : ""}${d ? ` à ${d} appareil${d > 1 ? "s" : ""}` : ""}${t ? ` · Telegram (${t})` : ""}`);
           this._close();
         } catch (err) { this._toast(`Envoi impossible : ${(err && err.message) || err}`); draw(); }
       });
@@ -444,17 +788,20 @@ class HolmMyMenuCard extends HTMLElement {
   }
 
   // ---------------- fenêtres ----------------
+  // FENÊTRES : fermeture explicite pour les formulaires qui ne doivent pas perdre leur contenu.
   _modal(title, html, opts = {}) {
+    this._editingRecipe = false;
     let root = this.shadowRoot.querySelector(".modal-root");
     if (!root) { root = document.createElement("div"); root.className = "modal-root"; this.shadowRoot.appendChild(root); }
     root.innerHTML = `<div class="ov"><div class="mdl ${opts.wide ? "wide" : ""}"><div class="mh">${opts.back ? `<button class="ib mback"><ha-icon icon="mdi:arrow-left"></ha-icon></button>` : ""}<div class="mt">${title}</div><button class="ib mclose"><ha-icon icon="mdi:close"></ha-icon></button></div><div class="mb">${html}</div></div></div>`;
-    root.querySelector(".ov").addEventListener("click", (e) => { if (e.target.classList.contains("ov")) this._close(); });
+    // Certaines fenêtres se ferment au clic extérieur ; pas le formulaire de rappel.
+    root.querySelector(".ov").addEventListener("click", (e) => { if (opts.dismissOnBackdrop !== false && e.target.classList.contains("ov")) this._close(); e.stopPropagation(); });
     root.querySelector(".mclose").addEventListener("click", () => this._close());
     if (opts.back) root.querySelector(".mback").addEventListener("click", opts.back);
     this._refresher = opts.refresh || null;
     return root.querySelector(".mb");
   }
-  _close() { const r = this.shadowRoot.querySelector(".modal-root"); if (r) r.remove(); this._refresher = null; }
+  _close() { this._editingRecipe = false; this._editingReminder = false; const r = this.shadowRoot.querySelector(".modal-root"); if (r) r.remove(); this._refresher = null; }
   _refreshModal() { if (this._refresher) this._refresher(); }
 
   // ----- créneau -----
@@ -710,7 +1057,7 @@ class HolmMyMenuCard extends HTMLElement {
   _editRecipe(r) {
     const isNew = !r || !r.id;
     r = r || { name: "", servings: this._s.servings, ingredients: [], steps: [] };
-    const lines = (r.ingredients || []).map((l) => [l.qty != null ? fq(l.qty) : "", l.unit, l.name, l.note ? `(${l.note})` : ""].filter(Boolean).join(" ")).join("\n");
+    const lines = Array.isArray(r.lines) ? r.lines.join("\n") : (r.ingredients || []).map((l) => [l.qty != null ? fq(l.qty) : "", l.unit, l.name, l.note ? `(${l.note})` : ""].filter(Boolean).join(" ")).join("\n");
     const mb = this._modal(isNew ? "Nouvelle recette" : `Modifier « ${esc(r.name)} »`, `
       <label class="fl">Nom<input class="f" data-f="name" value="${esc(r.name)}"></label>
       <div class="row"><label class="fl">Personnes<input class="f" type="number" min="1" data-f="servings" value="${r.servings || 4}"></label>
@@ -722,11 +1069,36 @@ class HolmMyMenuCard extends HTMLElement {
       <label class="fl">Ingrédients — un par ligne (ex. « 200 g de farine »)<textarea class="f" rows="8" data-f="lines">${esc(lines)}</textarea></label>
       <label class="fl">Étapes — une par ligne<textarea class="f" rows="8" data-f="steps">${esc((r.steps || []).join("\n"))}</textarea></label>
       <div class="row end"><button class="pill" data-x="cancel">Annuler</button><button class="pill main" data-x="save"><ha-icon icon="mdi:content-save"></ha-icon>Enregistrer</button></div>`,
-      { wide: true, back: isNew ? () => this._addRecipeModal() : () => this._recipeModal(r.id) });
-    let photo = null;
+      { wide: true, dismissOnBackdrop: false, back: isNew ? () => this._addRecipeModal() : () => this._recipeModal(r.id) });
+    this._editingRecipe = true;
+    // Isoler les gestes de sélection des raccourcis et clics du tableau de bord.
+    const dialog = mb.closest(".mdl");
+    ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "dblclick", "contextmenu"].forEach((eventName) => {
+      dialog.addEventListener(eventName, (e) => e.stopPropagation());
+    });
+    const unclassified = Array.isArray(r.unclassified) ? r.unclassified : [];
+    if (unclassified.length) {
+      const area = document.createElement("details");
+      area.className = "adv";
+      const summary = document.createElement("summary");
+      summary.textContent = `Texte non classé (${unclassified.length} lignes) — à vérifier`;
+      const raw = document.createElement("textarea");
+      raw.className = "f";
+      raw.rows = 5;
+      raw.readOnly = true;
+      raw.value = unclassified.join("\\n");
+      area.append(summary, raw);
+      mb.querySelector('[data-x="cancel"]').parentNode.before(area);
+    }
+    let photo = r.import_image || null;
+    if (photo) {
+      const pv = mb.querySelector(".photobox .pv");
+      if (pv) { pv.style.backgroundImage = `url('${photo}')`; pv.innerHTML = ""; }
+    }
     this._bindPhoto(mb, (d) => { photo = d; });
     mb.querySelectorAll("input,textarea").forEach((x) => { x.addEventListener("keydown", (e) => e.stopPropagation()); x.addEventListener("keyup", (e) => e.stopPropagation()); });
     mb.querySelector('[data-x="cancel"]').addEventListener("click", () => (isNew ? this._close() : this._recipeModal(r.id)));
+    mb.querySelector('[data-x="newrayon"]')?.addEventListener("click", () => this._categoryModal(() => this._ingModal(id, ro, back)));
     mb.querySelector('[data-x="save"]').addEventListener("click", async () => {
       const v = (k) => mb.querySelector(`[data-f="${k}"]`).value.trim();
       if (!v("name")) return this._toast("Donnez un nom à la recette");
@@ -734,7 +1106,7 @@ class HolmMyMenuCard extends HTMLElement {
         lines: v("lines").split("\n").map((x) => x.trim()).filter(Boolean), steps: v("steps").split("\n").map((x) => x.trim()).filter(Boolean) };
       rec.total = (rec.prep || 0) + (rec.cook || 0) || null;
       const img = v("image"); if (!photo && img && img !== (r.image_remote || r.image || "")) rec.image = img;
-      if (isNew) rec.source = "manual";
+      if (isNew) { rec.source = r.source || "manual"; if (r.source_url) rec.source_url = r.source_url; }
       const out = await this._do(this._ws("recipe/save", { recipe_id: isNew ? null : r.id, recipe: rec }), photo ? null : "Recette enregistrée");
       if (photo) await this._do(this._ws("image/upload", { kind: "recipe", item_id: out.id, data: photo }), "Recette et photo enregistrées");
       this._recipeModal(out.id);
@@ -742,7 +1114,7 @@ class HolmMyMenuCard extends HTMLElement {
   }
   _addRecipeModal(mode = "marmiton") {
     const mb = this._modal("Ajouter une recette", `
-      <div class="seg">${[["marmiton", "mdi:magnify", "Marmiton"], ["url", "mdi:link-variant", "Lien"], ["mealie", "mdi:chef-hat", "Mealie"], ["manual", "mdi:pencil", "À la main"]].map(([k, i, l]) => `<button class="${mode === k ? "on" : ""}" data-m="${k}"><ha-icon icon="${i}"></ha-icon>${l}</button>`).join("")}</div>
+      <div class="seg">${[["marmiton", "mdi:magnify", "Marmiton"], ["url", "mdi:link-variant", "Lien"], ["document", "mdi:file-pdf-box", "PDF"], ["mealie", "mdi:chef-hat", "Mealie"], ["manual", "mdi:pencil", "À la main"]].map(([k, i, l]) => `<button class="${mode === k ? "on" : ""}" data-m="${k}"><ha-icon icon="${i}"></ha-icon>${l}</button>`).join("")}</div>
       <div class="pane"></div>`, { wide: true });
     mb.querySelectorAll("[data-m]").forEach((b) => b.addEventListener("click", () => this._addRecipeModal(b.dataset.m)));
     const pane = mb.querySelector(".pane");
@@ -759,6 +1131,58 @@ class HolmMyMenuCard extends HTMLElement {
         try { const out = await this._ws("recipe/import", { url: u }); this._toast(out.existing ? "Cette recette est déjà dans votre base" : `« ${out.recipe.name} » importée`); this._recipeModal(out.recipe.id); }
         catch (e) { this._toast(`Import impossible : ${e.message || e}`); b.disabled = false; b.textContent = "Importer"; } };
       pane.querySelector("button").addEventListener("click", go); inp.addEventListener("keydown", (e) => e.key === "Enter" && go()); setTimeout(() => inp.focus(), 50);
+    } else if (mode === "document") {
+      pane.innerHTML = `<div class="muted">Choisissez un fichier PDF (8 Mo maximum). L'extraction peut ne pas fonctionner avec les PDF scannés ou constitués uniquement d'images. Le fichier n'est pas conservé.</div>
+        <label class="fl">Fichier depuis cet appareil<input class="f" type="file" accept=".pdf,application/pdf"></label>
+        <div class="row"><button class="pill main" data-kind="file">Analyser le fichier</button></div>
+        <div class="muted" data-status role="status"></div>`;
+      const button = pane.querySelector('[data-kind="file"]');
+      const status = pane.querySelector('[data-status]');
+      const fileInput = pane.querySelector('input[type="file"]');
+      fileInput.addEventListener("change", () => { status.textContent = ""; });
+      button.addEventListener("click", async () => {
+        const f = fileInput.files?.[0];
+        if (!f) return this._toast("Sélectionnez un PDF");
+        if (!/\.pdf$/i.test(f.name) || (f.type && f.type !== "application/pdf")) return this._toast("Seuls les fichiers PDF sont acceptés");
+        if (f.size > 8 * 1024 * 1024) return this._toast("Fichier supérieur à 8 Mo");
+        if (!f.size) return this._toast("Le fichier est vide");
+        button.disabled = true;
+        const original = button.innerHTML;
+        let uploadId = null;
+        try {
+          // Les messages WebSocket HA sont limités en taille : transférer le
+          // fichier en fragments plutôt que d'envoyer tout le PDF en base64.
+          const begin = await this._ws("recipe/document_upload_start", { filename: f.name, size: f.size });
+          uploadId = begin.upload_id;
+          const chunkSize = 128 * 1024;
+          const count = Math.ceil(f.size / chunkSize);
+          for (let index = 0; index < count; index++) {
+            const blob = f.slice(index * chunkSize, Math.min(f.size, (index + 1) * chunkSize));
+            const data = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result).split(",")[1]);
+              reader.onerror = () => reject(new Error("Lecture du fichier impossible"));
+              reader.readAsDataURL(blob);
+            });
+            await this._ws("recipe/document_upload_chunk", { upload_id: uploadId, index, data });
+            status.textContent = `Transfert : ${Math.round((index + 1) * 100 / count)} %`;
+          }
+          status.textContent = "Analyse du document en cours…";
+          const rec = await this._ws("recipe/document_upload_finish", { upload_id: uploadId });
+          uploadId = null;
+          if (rec.warnings?.length) this._toast(rec.warnings.join(" "));
+          // Le parseur retourne des lignes brutes ; l'éditeur les affiche pour validation.
+          this._editRecipe(rec);
+        } catch (e) {
+          const message = `Analyse impossible : ${e.message || e}`;
+          status.textContent = message;
+          this._toast(message);
+        } finally {
+          if (uploadId) this._ws("recipe/document_upload_cancel", { upload_id: uploadId }).catch(() => {});
+          button.disabled = false;
+          button.innerHTML = original;
+        }
+      });
     } else if (mode === "mealie") {
       pane.innerHTML = `<div class="muted pad">Lecture de vos recettes Mealie…</div>`;
       this._ws("mealie/list").then((list) => {
@@ -916,6 +1340,7 @@ class HolmMyMenuCard extends HTMLElement {
       <div class="sh">Fiche</div>
       <div class="row"><label class="fl">Nom<input class="f" data-f="name" value="${esc(i.name)}"></label>
         <label class="fl">Rayon<select class="f" data-f="aisle">${s.aisles.map(([k, l]) => `<option value="${k}" ${k === (i.aisle || "autre") ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label></div>
+      <div class="row"><button class="pill" data-x="newrayon"><ha-icon icon="mdi:shape-plus"></ha-icon>Créer un rayon</button></div>
       <div class="row"><label class="fl">Marque<input class="f" data-f="brand" value="${esc(i.brand || "")}"></label>
         <label class="fl">Conditionnement<input class="f" data-f="quantity" value="${esc(i.quantity || "")}" placeholder="500 g, 1 l…"></label>
         <label class="fl">Magasins<input class="f" data-f="stores" value="${esc(i.stores || "")}"></label></div>
@@ -929,6 +1354,7 @@ class HolmMyMenuCard extends HTMLElement {
     if (ro) return;
     mb.querySelectorAll("input").forEach((x) => { x.addEventListener("keydown", (e) => e.stopPropagation()); x.addEventListener("keyup", (e) => e.stopPropagation()); });
     this._bindPhoto(mb, (d) => this._do(this._ws("image/upload", { kind: "ingredient", item_id: id, data: d }), "Photo enregistrée"));
+    mb.querySelector('[data-x="newrayon"]')?.addEventListener("click", () => this._categoryModal(() => this._ingModal(id, ro, back)));
     mb.querySelector('[data-x="save"]').addEventListener("click", async () => {
       const ch = {};
       mb.querySelectorAll("[data-f]").forEach((f) => { ch[f.dataset.f] = f.value.trim(); });
@@ -1061,6 +1487,16 @@ input.search, .f { flex:1; min-width:0; box-sizing:border-box; padding:9px 12px;
 .lst { overflow-y:auto; margin-right:-6px; padding-right:6px; scrollbar-width:thin; }
 @media (pointer: coarse) { .lst { max-height:none !important; overflow:visible; margin-right:0; padding-right:0; } }
 .more { display:block; width:100%; margin:10px 0 2px; padding:9px; border-radius:12px; border:1px dashed var(--bd); background:none; color:var(--secondary-text-color); font-size:13px; } .more:hover { color:var(--primary-text-color); border-color:var(--ac); }
+.rem-row { display:flex; align-items:center; gap:8px; padding:12px 8px; border-bottom:1px solid var(--bd); }
+.rem-text { flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; }
+.rem-text b { font-size:14px; } .rem-text small { font-size:11px; color:var(--secondary-text-color); }
+.rem-actions { display:flex; flex:none; gap:1px; }
+.rem-actions .ib { min-width:32px; }
+.rem-form { display:flex; flex-direction:column; gap:12px; }
+.rem-field { display:flex; flex-direction:column; gap:5px; font-size:12px; font-weight:600; }
+.rem-days { display:flex; flex-wrap:wrap; gap:9px; }
+.rem-days label { display:flex; align-items:center; gap:3px; }
+@container (max-width:430px) { .rem-row { flex-wrap:wrap; } .rem-actions { margin-left:auto; } }
 /* recettes */
 .rgrid, .mgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; }
 .rc, .mc { border-radius:14px; background:var(--sf); overflow:hidden; cursor:pointer; transition:transform .15s; display:flex; flex-direction:column; }
@@ -1130,13 +1566,13 @@ a.pill { text-decoration:none; display:inline-flex; align-items:center; gap:6px;
 .ns { font-size:11px; font-weight:800; color:#fff; padding:2px 7px; border-radius:6px; display:inline-block; }
 /* courses */
 .shopmeta { font-size:12.5px; color:var(--secondary-text-color); margin:2px 2px 10px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-.si { display:grid; grid-template-columns:24px minmax(0,1fr) auto 28px; grid-template-rows:auto auto; column-gap:9px; align-items:center; padding:7px 6px; border-radius:10px; cursor:pointer; border-bottom:1px solid var(--bd); }
+.si { display:grid; grid-template-columns:24px minmax(0,1fr) 38px 38px; grid-template-rows:auto auto auto; column-gap:9px; align-items:center; padding:7px 6px; border-radius:10px; cursor:pointer; border-bottom:1px solid var(--bd); }
 .si:hover { background:var(--sf); }
-.si .cb { grid-row:1 / span 2; grid-column:1; width:22px; height:22px; border-radius:7px; border:2px solid var(--bd); display:grid; place-items:center; color:transparent; }
+.si .cb { grid-row:1 / span 3; grid-column:1; width:22px; height:22px; border-radius:7px; border:2px solid var(--bd); display:grid; place-items:center; color:transparent; }
 .si .cb ha-icon { --mdc-icon-size:16px; }
-.si b { font-size:14px; font-weight:600; } .si .q { font-size:13px; font-weight:600; color:var(--ac); text-align:right; white-space:nowrap; }
-.si small { grid-column:2 / 4; font-size:11px; color:var(--secondary-text-color); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.si .x { grid-row:1 / span 2; grid-column:4; border:0; background:none; opacity:.4; } .si .x ha-icon { --mdc-icon-size:16px; }
+.si b { grid-column:2; grid-row:1; font-size:14px; font-weight:600; min-width:0; } .si .q { grid-column:2; grid-row:2; font-size:13px; font-weight:600; color:var(--ac); text-align:left; white-space:normal; }
+.si small { grid-column:2; grid-row:3; font-size:11px; color:var(--secondary-text-color); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.si > .ib { grid-column:3; grid-row:1 / span 3; min-width:36px; min-height:40px; align-self:center; } .si .x { grid-row:1 / span 3; grid-column:4; min-width:36px; min-height:40px; align-self:center; border:0; background:none; opacity:.4; } .si .x ha-icon { --mdc-icon-size:16px; }
 .si.ck .cb { background:var(--ac); border-color:var(--ac); color:#0b1416; } .si.ck b, .si.ck .q { text-decoration:line-through; opacity:.5; }
 /* fenêtres */
 .ov { position:fixed; inset:0; z-index:9999; background:rgba(4,8,12,.6); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; padding:16px; box-sizing:border-box; }
@@ -1198,7 +1634,7 @@ class HolmMyMenuCardEditor extends HTMLElement {
       this._f.schema = [{ name: "title", selector: { text: {} } },
         { type: "grid", name: "", schema: [
           { name: "view", selector: { select: { mode: "dropdown", options: [{ value: "full", label: "Complet (semaine, recettes, ingrédients, courses)" }, { value: "today", label: "Menu du jour (compact, consultation)" }, { value: "week", label: "Semaine (planning, consultation)" }, { value: "stats", label: "Statistiques" }] } } },
-          { name: "tab", selector: { select: { mode: "dropdown", options: [{ value: "week", label: "Semaine" }, { value: "recipes", label: "Recettes" }, { value: "ingredients", label: "Ingrédients" }, { value: "shopping", label: "Courses" }, { value: "stats", label: "Statistiques" }] } } }] },
+          { name: "tab", selector: { select: { mode: "dropdown", options: [{ value: "week", label: "Semaine" }, { value: "recipes", label: "Recettes" }, { value: "ingredients", label: "Ingrédients" }, { value: "shopping", label: "Courses" }, { value: "reminders", label: "Rappels" }, { value: "stats", label: "Statistiques" }] } } }] },
         { name: "today_slots", selector: { select: { multiple: true, mode: "list", options: [{ value: "midi", label: "Midi" }, { value: "soir", label: "Soir" }] } } },
         { name: "list_height", selector: { number: { min: 0, max: 2000, step: 20, mode: "box", unit_of_measurement: "px" } } },
         { name: "show_frame", selector: { boolean: {} } }];

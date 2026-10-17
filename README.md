@@ -40,13 +40,18 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
 - 🛒 **Liste de courses** :
   - générée depuis la semaine choisie, avec les quantités mises à l'échelle et additionnées (1 l + 30 cl de lait = 1,3 l) ;
   - rangée par rayon, avec des articles ajoutés à la main et des cases à cocher en magasin ;
-  - **envoi par e-mail à plusieurs personnes** grâce au carnet d'adresses, et/ou en notification sur les téléphones ; copie ou vidage en un geste.
+  - **envoi par e-mail à plusieurs personnes** grâce au carnet d'adresses, par Telegram et/ou en notification sur les téléphones ; copie ou vidage en un geste ;
+  - regroupement des variantes d'ingrédients (œufs, lardons, beurre doux…), catégories personnalisées, exclusions temporaires par semaine et restauration des articles ;
+  - liste Telegram interactive avec boutons de validation synchronisés avec Home Assistant.
 - 📷 **Photos et code-barre** : photo d'une recette prise avec le téléphone ou choisie dans la galerie ; ajout d'un produit en **scannant son code-barre**.
 - 📊 **Statistiques** : recettes les plus planifiées, ingrédients les plus utilisés, repas par semaine, taille de la base.
 - 🖼️ **Quatre vues pour la carte** :
   - **Complet** pour tout gérer ;
   - **Menu du jour** et **Semaine** en simple consultation, idéales pour une tablette murale. Un toucher sur un plat ou un produit l'affiche en grand ;
   - **Statistiques**.
+- 📆 **Export du planning vers un calendrier Home Assistant**, local ou distant (Google Calendar, CalDAV) : ajout des repas, mise à jour des événements HOLM existants et synchronisation sans doublons.
+- 🔔 **Rappels programmables** : courses, menus, préparation des recettes ou message personnalisé ; envoi ponctuel, quotidien ou hebdomadaire par notification Home Assistant, Telegram ou e-mail.
+- 📄 **Import de recettes depuis un PDF texte** : lecture locale avec `pypdf`, sans service OCR ni serveur externe. Les PDF scannés sans texte sélectionnable ne sont pas pris en charge.
 - 🧩 **Capteurs** pour vos automatisations : menu du midi, menu du soir et prochain repas.
 
 ---
@@ -59,6 +64,8 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
 - [Recettes](#recettes)
 - [Ingrédients et Open Food Facts](#ingrédients-et-open-food-facts)
 - [Liste de courses](#liste-de-courses)
+- [Export vers un calendrier](#export-vers-un-calendrier)
+- [Rappels et notifications](#rappels-et-notifications)
 - [Statistiques](#statistiques)
 - [Capteurs](#capteurs)
 - [FAQ / dépannage](#faq--dépannage)
@@ -90,6 +97,20 @@ Copiez le dossier `custom_components/holm_mymenu` dans `/config/custom_component
 3. Facultatif, dans **Configurer** (les options de l'intégration) :
    - **Adresse de Mealie** (ex. `http://192.168.1.10:9925`) et **jeton d'API Mealie** (Mealie → Profil → Jetons d'API), pour importer vos recettes Mealie ;
    - le nombre de personnes par défaut peut être changé à tout moment.
+
+### Notifications par e-mail : SMTP
+
+Pour envoyer la liste de courses ou les rappels par e-mail, configurez d'abord l'intégration [**SMTP** de Home Assistant](https://www.home-assistant.io/integrations/smtp/). Elle fournit le serveur, le port, les identifiants et l'expéditeur ; HOLM réutilise ces réglages et permet de choisir les destinataires dans son carnet d'adresses.
+
+### Notifications et courses interactives : Telegram
+
+1. Configurez l'intégration [**Telegram Bot** de Home Assistant](https://www.home-assistant.io/integrations/telegram_bot/) avec votre bot et autorisez les discussions (chats) destinataires. HOLM n'a pas besoin d'un deuxième jeton Telegram.
+2. Vérifiez que Home Assistant dispose du service `telegram_bot.send_message` et que le bot peut publier dans le chat ou le groupe choisi.
+3. Dans l'onglet **Courses** de HOLM, ouvrez l'envoi de la liste, sélectionnez la destination Telegram (identifiant du chat et, pour un sujet de supergroupe, identifiant du fil), puis publiez.
+4. Le message affiche les catégories et les quantités ; ses boutons permettent de cocher ou décocher les articles. Les changements sont répercutés dans la liste HOLM et les messages publiés sont mis à jour.
+
+### Notifications natives Home Assistant 
+Pour les notifications sur téléphone, installez l'[**application compagnon Home Assistant**](https://www.home-assistant.io/integrations/mobile_app/) et activez les notifications de l'appareil. Vous pourrez ensuite sélectionner les entités de notification disponibles.
 
 Tout est stocké localement dans Home Assistant (`.storage/holm_mymenu`), et les photos dans `www/holm_mymenu/`. Ce dossier est créé par l'intégration et ses photos sont servies par elle-même : rien à préparer, et elles s'affichent même si le dossier `www` n'existait pas encore.
 
@@ -154,7 +175,17 @@ Bouton **Ajouter** de l'onglet Recettes :
 - **Marmiton** : tapez « lasagnes », choisissez un résultat, c'est importé.
 - **Lien** : collez l'adresse d'une recette, de Marmiton ou d'un autre site qui publie le format schema.org (la plupart des sites de cuisine).
 - **Mealie** : cochez les recettes à importer (adresse et jeton dans les options de l'intégration). Les recettes déjà importées sont signalées.
+- **PDF** : choisissez un document contenant du texte sélectionnable (voir la procédure ci-dessous).
 - **À la main** : nom, portions, temps, une ligne par ingrédient, une ligne par étape, et une **photo** : *Choisir une photo* (galerie du téléphone ou fichier) ou *Prendre une photo* avec l'appareil. Elle est réduite avant l'envoi et enregistrée sur votre Home Assistant.
+
+### Importer une recette depuis un PDF
+
+1. Ouvrez la vue **Complet**, onglet **Recettes**, puis cliquez sur **Ajouter** et choisissez **PDF**.
+2. Sélectionnez un fichier `.pdf` de **8 Mo maximum** et **15 pages maximum**. Le document doit contenir du texte sélectionnable : un scan constitué uniquement d’images ne fonctionne pas, car **l’OCR a été supprimé**.
+3. Laissez HOLM transférer le document par fragments et analyser son texte. Le formulaire de recette est prérempli à partir des informations reconnues ; le **nom du fichier** sert de titre initial et une illustration intégrée au PDF peut être proposée.
+4. Vérifiez le titre, les portions, les ingrédients et les étapes, corrigez-les si nécessaire, puis **enregistrez la recette**. L’analyse ne l’enregistre pas automatiquement.
+
+Le transfert est limité à deux documents simultanés par connexion ; les fragments restent temporairement en mémoire (expiration après 10 minutes d’inactivité). Le PDF original n’est pas conservé. L’image éventuelle n’est enregistrée qu’avec la recette.
 
 Dans la fiche d'une recette, vous pouvez :
 
@@ -194,7 +225,49 @@ Dans la fiche d'une recette, vous pouvez :
   - **un seul e-mail** part vers toutes les adresses cochées, mis en forme par rayon avec une case à cocher par article. Il utilise les réglages de votre intégration **SMTP** de Home Assistant (serveur, identifiants, expéditeur) : rien à ressaisir, et aucune adresse à déclarer comme destinataire SMTP ;
   - les **téléphones et tablettes** (entités de notification) peuvent aussi être cochés : ils reçoivent la liste en notification ;
   - **Ouvrir ma messagerie** prépare le même message dans la messagerie de l'appareil, avec les adresses cochées.
+- Les articles similaires sont regroupés pour l'affichage, sans perdre les entrées d'origine : par exemple **œuf/œufs**, **lardon/lardons/lardon nature ou fumé** et **beurre/beurre doux**. Les quantités compatibles sont additionnées.
+- Vous pouvez **personnaliser les catégories**, modifier ou retirer un article de la liste sans supprimer l'ingrédient de sa recette, et **exclure des articles pour une semaine** puis les restaurer individuellement ou tous ensemble.
+- L’envoi **Telegram** propose une liste interactive, synchronisée avec les cases à cocher dans HOLM. Le message conserve les rayons, les quantités et les dates de la semaine de courses. Les longues listes sont réparties en plusieurs messages ; les boutons agissent sur tous les articles regroupés et les messages existants sont actualisés lorsque la liste change.
 - **Copier** met la liste dans le presse-papiers. **Vider la liste** repart de zéro.
+
+---
+
+## Export vers un calendrier
+
+Le planning HOLM peut être **exporté manuellement** vers un calendrier déjà configuré dans Home Assistant : un calendrier local, **Google Calendar** ou un calendrier distant **CalDAV**. HOLM utilise l'entité `calendar.*` fournie par l'intégration de calendrier ; il ne demande pas de compte Google ni d'identifiants CalDAV supplémentaires.
+
+### Préparer le calendrier
+
+1. Ajoutez l'intégration correspondant à votre calendrier : [**Local Calendar**](https://www.home-assistant.io/integrations/local_calendar/), [**Google Calendar**](https://www.home-assistant.io/integrations/google/) ou [**CalDAV**](https://www.home-assistant.io/integrations/caldav/).
+2. Vérifiez que le calendrier cible apparaît comme entité `calendar.*` dans Home Assistant et qu'il autorise la création d'événements.
+3. Dans HOLM My Menu, ouvrez le planning et la fonction d'**export calendrier**. Choisissez le calendrier de destination, la période et, si souhaité, un préfixe pour les titres.
+
+### Fonctionnement de l'export
+
+- HOLM crée **un événement par repas** (midi ou soir) contenant les recettes prévues et, lorsqu'elles existent, leurs URL d'origine.
+- Horaires actuels : **12 h–13 h** pour le midi et **19 h–20 h** pour le soir, dans le fuseau horaire de Home Assistant.
+- La période sélectionnée peut couvrir **32 jours maximum**.
+- **Ajouter les événements manquants** : conserve les événements HOLM déjà présents et n'ajoute que ceux qui manquent.
+- **Synchroniser** : crée les événements absents, met à jour ceux qui ont changé et peut supprimer les événements HOLM devenus inutiles, **uniquement après confirmation**.
+- Les événements créés portent un identifiant HOLM dans leur description : la synchronisation n'altère pas les autres rendez-vous du calendrier.
+
+> La mise à jour et la suppression dépendent des fonctionnalités prises en charge par l'intégration du calendrier choisi. Si elles sont indisponibles, HOLM signale l'impossibilité de synchroniser au lieu de recréer les événements en double. L'export est **déclenché par l'utilisateur**, ce n'est pas une synchronisation automatique permanente ni une importation bidirectionnelle des rendez-vous.
+
+---
+
+## Rappels et notifications
+
+HOLM permet de programmer des rappels pour **faire les courses**, **consulter les menus**, **préparer une recette** ou envoyer un **message personnalisé** (par exemple « Acheter les pommes de terre à la ferme »).
+
+- **Fréquence** : une seule fois (date précise), chaque jour ou chaque semaine, avec choix de l’heure et, pour les rappels hebdomadaires, des jours. Les horaires utilisent le fuseau horaire de Home Assistant.
+- **Canaux** : notification Home Assistant sur téléphone, Telegram (chat ou sujet) et e-mail via SMTP. Plusieurs destinataires peuvent être sélectionnés.
+- **Courses** : le rappel et les messages envoyés mentionnent la période correspondant à la liste sélectionnée.
+- **Gestion** : création, modification, suppression et test d’un rappel depuis l’interface HOLM.
+- **Déclenchement** : vérification toutes les 30 secondes ; un rappel programmé n’est envoyé qu’une fois par minute prévue, y compris après redémarrage. En cas d’échec, le statut indique l’erreur mais l’envoi n’est pas automatiquement retenté pendant cette minute.
+- **Condition « uniquement si nécessaire »** : pour les courses, pas de rappel si aucun article n’est en attente ; pour le planning, pas de rappel si tous les repas des sept prochains jours sont prévus. Les rappels de préparation restent des consignes saisies manuellement.
+- **Telegram** : les rappels sont des messages distincts de la liste de courses interactive. Un sujet de supergroupe peut être ciblé avec son identifiant de fil.
+
+Les paramètres des canaux sont ceux des intégrations [SMTP](https://www.home-assistant.io/integrations/smtp/), [Telegram Bot](https://www.home-assistant.io/integrations/telegram_bot/) et [Mobile App](https://www.home-assistant.io/integrations/mobile_app/) de Home Assistant : HOLM ne stocke pas de mot de passe SMTP ni de jeton Telegram supplémentaire.
 
 ---
 
@@ -263,6 +336,15 @@ Open Food Facts est un service gratuit, parfois saturé. Réessayez un peu plus 
 
 **Une recette Marmiton ne s'importe pas.**
 Marmiton peut changer sa page. Essayez l'import par **Lien** ; sinon, ouvrez une issue avec l'adresse de la recette.
+
+**L'export calendrier refuse une mise à jour ou une suppression.**
+Le calendrier cible doit permettre l'opération demandée. Essayez le mode d'ajout des événements manquants ou vérifiez les droits du calendrier dans Home Assistant. La suppression d'anciens événements HOLM exige une confirmation explicite.
+
+**Un PDF scanné ne s’importe pas.**
+HOLM lit les PDF qui contiennent du texte exploitable. L’OCR a été retiré : convertissez d’abord le scan en PDF avec texte sélectionnable. Vérifiez également les limites de **8 Mo et 15 pages**, puis contrôlez le brouillon de recette avant enregistrement.
+
+**Telegram n'envoie pas la liste ou les boutons ne répondent pas.**
+Vérifiez l'intégration [Telegram Bot](https://www.home-assistant.io/integrations/telegram_bot/), les chats autorisés, les droits du bot dans le groupe et, le cas échéant, l'identifiant du sujet. Le service `telegram_bot.send_message` doit être disponible.
 
 **L'envoi par e-mail échoue.**
 L'envoi utilise l'intégration **SMTP** de Home Assistant : vérifiez qu'elle est configurée et qu'elle fonctionne. Pour Gmail, il faut un *mot de passe d'application*. Sans intégration SMTP, utilisez « Ouvrir ma messagerie ».

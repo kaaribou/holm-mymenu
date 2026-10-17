@@ -25,5 +25,14 @@
         }
       }
     }
+  },
+  "telegram_shopping": {
+    "title": "Shopping list",
+    "generated": "Generated on",
+    "unknown_quantity": "quantity unspecified",
+    "eggs": "Eggs",
+    "potatoes": "Potatoes",
+    "tomatoes": "Tomatoes",
+    "part": "part"
   }
 }

@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import base64
+import binascii
+import secrets
+import time
 import logging
 from datetime import date
 
@@ -16,6 +19,9 @@ from .const import CONF_MEALIE_TOKEN, CONF_MEALIE_URL, DOMAIN, SIGNAL_UPDATED, S
 from .sources import SourceError, import_recipe_url, marmiton_search, mealie_recipe, mealie_recipes, off_product, off_search
 from .mailer import MailError, build_bodies, send_mail, smtp_settings
 from .store import MenuStore, gather_limited
+from .shopping_period import shopping_period
+from .calendar_export import calendar_events, export_to_calendar
+from .document_import import analyze, DocumentImportError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,8 +44,10 @@ def _err(connection, msg, e: Exception) -> None:
 def async_register(hass: HomeAssistant) -> None:
     for fn in (ws_subscribe, ws_ing_search, ws_ing_add, ws_ing_update, ws_ing_delete, ws_ing_merge, ws_recipe_get, ws_marmiton,
                ws_import, ws_recipe_save, ws_recipe_delete, ws_plan_set, ws_plan_add, ws_plan_move, ws_shop_generate, ws_shop_add,
-               ws_shop_toggle, ws_shop_remove, ws_mealie_list, ws_mealie_import, ws_contact_save, ws_contact_delete,
-               ws_shop_send, ws_stats, ws_image_upload, ws_barcode, ws_mail_info):
+               ws_shop_toggle, ws_shop_toggle_group, ws_shop_remove_group, ws_shop_remove, ws_shop_update, ws_aisle_create, ws_aisle_update, ws_aisle_delete, ws_shop_restore, ws_mealie_list, ws_mealie_import, ws_contact_save, ws_contact_delete,
+               ws_shop_send, ws_stats, ws_image_upload, ws_barcode, ws_mail_info, ws_calendar_export, ws_document_analyze, ws_document_upload_start,
+               ws_document_upload_chunk, ws_document_upload_finish, ws_document_upload_cancel,
+               ws_reminder_save, ws_reminder_delete, ws_reminder_test):
         websocket_api.async_register_command(hass, fn)
 
 
@@ -234,6 +242,7 @@ async def ws_plan_move(hass, connection, msg):
 # ---------------- courses ----------------
 @websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/shopping/generate", vol.Required("start"): str, vol.Required("end"): str})
 @websocket_api.async_response
+# API COURSES : générer à partir des recettes sans perdre les ajouts manuels.
 async def ws_shop_generate(hass, connection, msg):
     store = _store(hass)
     store.generate_shopping(msg["start"], msg["end"])
@@ -259,6 +268,31 @@ async def ws_shop_toggle(hass, connection, msg):
     connection.send_result(msg["id"])
 
 
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/shopping/toggle_group", vol.Required("item_ids"): [str]})
+@websocket_api.async_response
+async def ws_shop_toggle_group(hass, connection, msg):
+    store = _store(hass)
+    ids = set(msg["item_ids"])
+    found = [it for it in store.data["shopping"].get("items", []) if it["id"] in ids]
+    if found:
+        checked = not all(it.get("checked") for it in found)
+        for it in found:
+            it["checked"] = checked
+        store.changed("shopping")
+    connection.send_result(msg["id"], {})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/shopping/remove_group", vol.Required("item_ids"): [str]})
+@websocket_api.async_response
+# API EXCLUSIONS : retrait de la liste uniquement, pas de suppression de recette.
+async def ws_shop_remove_group(hass, connection, msg):
+    store = _store(hass)
+    ids = set(msg["item_ids"])
+    store.shopping_remove_group(list(ids))
+    store.changed("shopping")
+    connection.send_result(msg["id"], {})
+
+
 @websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/shopping/remove", vol.Optional("item_id"): str, vol.Optional("checked_only", default=False): bool})
 @websocket_api.async_response
 async def ws_shop_remove(hass, connection, msg):
@@ -266,6 +300,64 @@ async def ws_shop_remove(hass, connection, msg):
     store.shopping_remove(msg.get("item_id"), msg["checked_only"])
     store.changed("shopping")
     connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/aisle/create", vol.Required("name"): str, vol.Optional("icon", default="🟣"): str})
+@websocket_api.async_response
+# API RAYONS : les catégories personnalisées sont stockées par HOLM.
+async def ws_aisle_create(hass, connection, msg):
+    store = _store(hass)
+    try:
+        a = store.aisle_create(msg["name"], msg["icon"])
+        store.changed("all")
+        connection.send_result(msg["id"], a)
+    except ValueError as e:
+        _err(connection, msg, e)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/aisle/update", vol.Required("aisle_id"): str, vol.Optional("name"): str, vol.Optional("icon"): str})
+@websocket_api.async_response
+async def ws_aisle_update(hass, connection, msg):
+    store = _store(hass)
+    try:
+        store.aisle_update(msg["aisle_id"], msg.get("name"), msg.get("icon"))
+        store.changed("all")
+        connection.send_result(msg["id"], {})
+    except ValueError as e:
+        _err(connection, msg, e)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/aisle/delete", vol.Required("aisle_id"): str})
+@websocket_api.async_response
+async def ws_aisle_delete(hass, connection, msg):
+    store = _store(hass)
+    try:
+        store.aisle_delete(msg["aisle_id"])
+        store.changed("all")
+        connection.send_result(msg["id"], {})
+    except ValueError as e:
+        _err(connection, msg, e)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/shopping/update", vol.Required("item_ids"): [str], vol.Required("changes"): dict})
+@websocket_api.async_response
+async def ws_shop_update(hass, connection, msg):
+    store = _store(hass)
+    try:
+        store.shopping_update(msg["item_ids"], msg["changes"])
+        store.changed("shopping")
+        connection.send_result(msg["id"], {})
+    except ValueError as e:
+        _err(connection, msg, e)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/shopping/restore", vol.Optional("keys"): [str]})
+@websocket_api.async_response
+async def ws_shop_restore(hass, connection, msg):
+    store = _store(hass)
+    store.shopping_restore(msg.get("keys"))
+    store.changed("shopping")
+    connection.send_result(msg["id"], {})
 
 
 # ---------------- Mealie ----------------
@@ -345,26 +437,40 @@ async def ws_mail_info(hass, connection, msg):
     connection.send_result(msg["id"], {"smtp": bool(s), "sender": s["sender"] if s else "", "name": s["title"] if s else ""})
 
 
+# Regroupement de présentation : les identifiants de courses originaux sont
+# conservés pour les cases à cocher et la synchronisation Telegram.
 def _shopping_groups(store: MenuStore) -> tuple[str, list]:
-    from .const import AISLES
+    """Prépare le titre daté et les articles non cochés par rayon pour l’envoi.
+
+    Les groupes sont uniquement une présentation : les identifiants HOLM
+    d’origine restent disponibles pour les interactions avec Telegram.
+    """
     sh = store.data["shopping"]
-    items = [i for i in sh.get("items", []) if not i.get("checked")]
-    groups = [(label, sorted([i for i in items if (i.get("aisle") or "autre") == key], key=lambda x: x["name"].lower())) for key, label in AISLES]
+    from .shopping_groups import shopping_groups
+    items = [g for g in shopping_groups(sh.get("items", [])) if not g["checked"]]
+    groups = [(label, sorted([i for i in items if i["aisle"] == key], key=lambda x: x["name"].lower())) for key, label in store.aisles()]
     groups = [g for g in groups if g[1]]
-    rng = sh.get("range") or {}
+    # Initialiser le titre avant d’ajouter éventuellement la période des courses.
+    # Le même titre est utilisé dans le sujet e-mail et la notification HA.
     title = "Liste de courses"
-    if rng.get("start"):
-        d = date.fromisoformat(rng["start"])
-        months = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
-        title += f" — semaine du {d.day} {months[d.month - 1]}"
+    # La période vient de la génération des courses, pas de la date d’envoi.
+    period = shopping_period(sh)
+    if period:
+        title += f" — {period}"
     return title, groups
 
 
 @websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/shopping/send", vol.Optional("contacts", default=[]): [str],
-                                  vol.Optional("emails", default=[]): [str], vol.Optional("entities", default=[]): [str]})
+                                  vol.Optional("emails", default=[]): [str], vol.Optional("entities", default=[]): [str],
+                                  vol.Optional("telegram_targets", default=[]): [dict]})
 @websocket_api.async_response
+# API ENVOI : une même période de courses pour Telegram, e-mail et HA.
 async def ws_shop_send(hass, connection, msg):
-    """Envoie la liste : un e-mail à toutes les adresses choisies, et une notification aux appareils choisis."""
+    """Envoie la liste via SMTP, notifications HA et/ou Telegram.
+
+    La période provient de la liste générée, et non du jour de l’envoi.
+    L’envoi SMTP précède les notifications ; les erreurs sont renvoyées au client.
+    """
     store = _store(hass)
     title, groups = _shopping_groups(store)
     if not groups:
@@ -372,7 +478,7 @@ async def ws_shop_send(hass, connection, msg):
     text, body = build_bodies(title, groups, "Envoyé depuis HOLM My Menu")
     emails = [c["email"] for c in store.data["contacts"] if c["id"] in msg["contacts"]] + [e.strip() for e in msg["emails"] if "@" in e]
     emails = list(dict.fromkeys(emails))
-    sent = {"emails": [], "entities": []}
+    sent = {"emails": [], "entities": [], "telegram_targets": []}
     if emails:
         settings = smtp_settings(hass)
         if not settings:
@@ -382,7 +488,12 @@ async def ws_shop_send(hass, connection, msg):
         except MailError as e:
             return _err(connection, msg, e)
         sent["emails"] = emails
+    # Les notifications mobiles affichent aussi la plage complète dans le
+    # corps : certains téléphones tronquent le titre de la notification.
     short = "\n".join(f"{label} : " + ", ".join(i["name"] + (f" ({i['display']})" if i.get("display") else "") for i in items) for label, items in groups)
+    period = shopping_period(store.data["shopping"])
+    if period:
+        short = period + "\n\n" + short
     for ent in msg["entities"]:
         if not ent.startswith("notify."):
             continue
@@ -391,6 +502,18 @@ async def ws_shop_send(hass, connection, msg):
             sent["entities"].append(ent)
         except Exception as e:  # noqa: BLE001
             return _err(connection, msg, e)
+    sync = hass.data[DOMAIN].get("telegram_sync")
+    if msg["telegram_targets"]:
+        if sync is None:
+            return connection.send_error(msg["id"], "holm_mymenu_error", "Synchronisation Telegram indisponible")
+        try:
+            for target in msg["telegram_targets"]:
+                chat_id = int(target["chat_id"])
+                thread_id = int(target["thread_id"]) if str(target.get("thread_id", "")).strip() else None
+                await sync.publish(chat_id, thread_id)
+                sent["telegram_targets"].append({"chat_id": chat_id, "thread_id": thread_id})
+        except (ValueError, KeyError, RuntimeError) as err:
+            return _err(connection, msg, err)
     connection.send_result(msg["id"], sent)
 
 
@@ -434,3 +557,207 @@ async def ws_barcode(hass, connection, msg):
     if not p and not have:
         return connection.send_error(msg["id"], "not_found", f"Produit {code} inconnu d'Open Food Facts")
     connection.send_result(msg["id"], {"product": p, "existing": have})
+
+
+# ---------------- export calendrier ----------------
+@websocket_api.websocket_command({
+    vol.Required("type"): "holm_mymenu/calendar/export",
+    vol.Required("entity_id"): str,
+    vol.Required("start"): str,
+    vol.Required("end"): str,
+    vol.Optional("prefix", default=""): str,
+    vol.Optional("mode", default="sync"): vol.In(["sync", "missing"]),
+    vol.Optional("confirm_delete", default=False): bool,
+})
+@websocket_api.async_response
+async def ws_calendar_export(hass, connection, msg):
+    """Déclenche un export manuel, sans synchronisation permanente.
+
+    « missing » ajoute les repas absents ; « sync » actualise les événements
+    HOLM et exige confirm_delete avant toute suppression prévue.
+    """
+    try:
+        result = await export_to_calendar(
+            hass, _store(hass), msg["entity_id"], msg["start"], msg["end"], msg["prefix"][:80], msg["mode"], msg["confirm_delete"]
+        )
+    except Exception as err:  # noqa: BLE001 — réponse d’erreur WebSocket
+        return _err(connection, msg, err)
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "holm_mymenu/recipe/analyze_document",
+    vol.Optional("url"): str,
+    vol.Optional("path"): str,
+    vol.Optional("file_data"): str,
+    vol.Optional("filename"): str,
+})
+@websocket_api.async_response
+async def ws_document_analyze(hass, connection, msg):
+    """Analyse une source PDF autorisée et renvoie un brouillon de recette.
+
+    Les documents scannés sans texte sélectionnable ne sont pas pris en charge.
+    """
+    try:
+        result = await analyze(
+            hass, async_get_clientsession(hass),
+            url=msg.get("url"), path=msg.get("path"),
+            file_data=msg.get("file_data"), filename=msg.get("filename", ""),
+            options=hass.data[DOMAIN].get("options", {}),
+        )
+        connection.send_result(msg["id"], result)
+    except (DocumentImportError, ValueError) as err:
+        _err(connection, msg, err)
+
+
+# ---------------- import de documents par fragments ----------------
+# Les limites WebSocket de HA interdisent un PDF de plusieurs Mo en un seul
+# message. Un transfert n'existe qu'en RAM, expire au bout de 10 minutes et
+# est rattaché à la connexion WebSocket qui l'a créé.
+_UPLOAD_MAX = 8 * 1024 * 1024
+_UPLOAD_CHUNK = 128 * 1024
+_UPLOAD_TTL = 600
+
+
+def _uploads(hass):
+    """Récupère les transferts en RAM et purge ceux inactifs depuis dix minutes."""
+    pending = hass.data[DOMAIN].setdefault("_document_uploads", {})
+    now = time.monotonic()
+    for key, item in list(pending.items()):
+        if now - item["updated"] > _UPLOAD_TTL:
+            pending.pop(key, None)
+    return pending
+
+
+def _owned_upload(hass, connection, upload_id):
+    """Refuse un transfert expiré ou créé par une autre connexion WebSocket."""
+    pending = _uploads(hass)
+    item = pending.get(upload_id)
+    if item is None or item["connection"] is not connection:
+        raise DocumentImportError("Transfert introuvable ou expiré : recommencez")
+    return item
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "holm_mymenu/recipe/document_upload_start",
+    vol.Required("filename"): str,
+    vol.Required("size"): vol.All(vol.Coerce(int), vol.Range(min=1, max=_UPLOAD_MAX)),
+})
+@websocket_api.async_response
+async def ws_document_upload_start(hass, connection, msg):
+    """Ouvre un transfert PDF de 8 Mo maximum, limité à deux par connexion."""
+    pending = _uploads(hass)
+    if sum(item["connection"] is connection for item in pending.values()) >= 2:
+        return _err(connection, msg, DocumentImportError("Deux transferts déjà en cours"))
+    upload_id = secrets.token_urlsafe(24)
+    pending[upload_id] = {
+        "connection": connection, "filename": msg["filename"][:180],
+        "size": msg["size"], "parts": [], "received": 0,
+        "updated": time.monotonic(),
+    }
+    connection.send_result(msg["id"], {"upload_id": upload_id})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "holm_mymenu/recipe/document_upload_chunk",
+    vol.Required("upload_id"): str,
+    vol.Required("index"): vol.All(vol.Coerce(int), vol.Range(min=0)),
+    vol.Required("data"): str,
+})
+@websocket_api.async_response
+async def ws_document_upload_chunk(hass, connection, msg):
+    """Accepte un fragment base64 de 128 Kio maximum dans l’ordre attendu."""
+    try:
+        item = _owned_upload(hass, connection, msg["upload_id"])
+        if msg["index"] != len(item["parts"]):
+            raise DocumentImportError("Fragments reçus dans le désordre")
+        if len(msg["data"]) > 180_000:
+            raise DocumentImportError("Fragment trop volumineux")
+        try:
+            part = base64.b64decode(msg["data"], validate=True)
+        except (ValueError, binascii.Error) as err:
+            raise DocumentImportError("Fragment corrompu") from err
+        if not part or len(part) > _UPLOAD_CHUNK or item["received"] + len(part) > item["size"]:
+            raise DocumentImportError("Taille de fichier incorrecte")
+        item["parts"].append(part)
+        item["received"] += len(part)
+        item["updated"] = time.monotonic()
+        connection.send_result(msg["id"], {"received": item["received"]})
+    except DocumentImportError as err:
+        _err(connection, msg, err)
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "holm_mymenu/recipe/document_upload_finish",
+    vol.Required("upload_id"): str,
+})
+@websocket_api.async_response
+async def ws_document_upload_finish(hass, connection, msg):
+    """Assemble les fragments, supprime le transfert puis analyse le PDF."""
+    try:
+        item = _owned_upload(hass, connection, msg["upload_id"])
+        _uploads(hass).pop(msg["upload_id"], None)
+        if item["received"] != item["size"]:
+            raise DocumentImportError("Fichier incomplet")
+        data = b"".join(item["parts"])
+        item["parts"].clear()
+        result = await analyze(
+            hass, async_get_clientsession(hass),
+            file_data=base64.b64encode(data).decode("ascii"),
+            filename=item["filename"],
+            options=hass.data[DOMAIN].get("options", {}),
+        )
+        connection.send_result(msg["id"], result)
+    except Exception as err:  # noqa: BLE001
+        _err(connection, msg, err)
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "holm_mymenu/recipe/document_upload_cancel",
+    vol.Required("upload_id"): str,
+})
+@websocket_api.async_response
+async def ws_document_upload_cancel(hass, connection, msg):
+    """Annule uniquement un transfert appartenant à la connexion courante."""
+    pending = _uploads(hass)
+    item = pending.get(msg["upload_id"])
+    if item and item["connection"] is connection:
+        pending.pop(msg["upload_id"], None)
+    connection.send_result(msg["id"], {})
+
+
+# ---------------- rappels ----------------
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/reminder/save", vol.Required("reminder"): dict, vol.Optional("reminder_id"): str})
+@websocket_api.async_response
+# API RAPPELS : valider les destinations et conserver la configuration enregistrée.
+async def ws_reminder_save(hass, connection, msg):
+    """Valide et enregistre un rappel ; retourne son ID et ses paramètres."""
+    try:
+        result = hass.data[DOMAIN]["reminders"].save(msg["reminder"], msg.get("reminder_id"))
+        connection.send_result(msg["id"], result)
+    except (ValueError, TypeError) as err:
+        _err(connection, msg, err)
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/reminder/delete", vol.Required("reminder_id"): str})
+@websocket_api.async_response
+async def ws_reminder_delete(hass, connection, msg):
+    """Supprime un rappel identifié, ou retourne une erreur s’il est absent."""
+    try:
+        hass.data[DOMAIN]["reminders"].delete(msg["reminder_id"])
+        connection.send_result(msg["id"], {})
+    except ValueError as err:
+        _err(connection, msg, err)
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/reminder/test", vol.Required("reminder_id"): str})
+@websocket_api.async_response
+async def ws_reminder_test(hass, connection, msg):
+    """Teste l’envoi immédiatement, sans consommer son prochain déclenchement."""
+    manager = hass.data[DOMAIN]["reminders"]
+    reminder = next((r for r in manager.store.data["reminders"] if r["id"] == msg["reminder_id"]), None)
+    if reminder is None:
+        return connection.send_error(msg["id"], "not_found", "Rappel introuvable")
+    try:
+        result = await manager.execute(reminder, test=True)
+        connection.send_result(msg["id"], {"status": result})
+    except Exception as err:
+        _err(connection, msg, err)
