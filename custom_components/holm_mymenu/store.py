@@ -373,9 +373,47 @@ class MenuStore:
         r["updated"] = time.time()
         return r
 
+    async def duplicate_recipe(self, rid: str) -> dict:
+        """Copie complète d'une recette (« revisitée ») ; l'original ne change pas."""
+        src = self.data["recipes"].get(rid)
+        if not src:
+            raise KeyError(rid)
+        import copy
+        r = copy.deepcopy(src)
+        names = {x.get("name") for x in self.data["recipes"].values()}
+        base = f"{src.get('name') or 'Recette'} (revisitée)"
+        name, n = base, 2
+        while name in names:
+            name, n = f"{base} {n}", n + 1
+        new_id = _id()
+        for k in ("source_url", "mealie_slug", "mealie_link"):
+            r.pop(k, None)
+        now = time.time()
+        r.update({"id": new_id, "name": name, "favorite": False, "created": now, "updated": now, "copied_from": rid,
+                  "source": "revisitee"})
+        img = str(src.get("image") or "")
+        if img.startswith(MEDIA_PATH):
+            fname = img[len(MEDIA_PATH) + 1:].split("?")[0]
+            ext = os.path.splitext(fname)[1] or ".jpg"
+            old, new = os.path.join(self._img_dir, fname), os.path.join(self._img_dir, f"{new_id}{ext}")
+
+            def _copy() -> bool:
+                if not os.path.exists(old):
+                    return False
+                import shutil
+                shutil.copyfile(old, new)
+                return True
+            if await self.hass.async_add_executor_job(_copy):
+                r["image"] = f"{MEDIA_PATH}/{new_id}{ext}?v={int(now)}"
+        self.data["recipes"][new_id] = r
+        return r
+
     def delete_recipe(self, rid: str) -> None:
         self.data["recipes"].pop(rid, None)
         self.data["history"].pop(rid, None)
+        for other in self.data["recipes"].values():
+            if other.get("copied_from") == rid:
+                other.pop("copied_from", None)
         for day in self.data["plan"].values():
             for slot in list(day):
                 day[slot] = [e for e in day[slot] if e.get("recipe_id") != rid]

@@ -5,7 +5,7 @@
  *   today_slots: [midi, soir]   list_height: 620   show_frame: false
  */
 (() => {
-const VERSION = "1.1.8-reminders-cleanup";
+const VERSION = "1.1.8";
 // Shared by the Telegram sharing dialog and the calendar export dialog.
 const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v == null ? d : v; } catch (_) { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
@@ -399,7 +399,7 @@ class HolmMyMenuCard extends HTMLElement {
           <div class="ri" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}>${r.image ? "" : `<ha-icon icon="mdi:chef-hat"></ha-icon>`}${r.favorite ? `<i class="fav"><ha-icon icon="mdi:heart"></ha-icon></i>` : ""}</div>
           <div class="rn">${esc(r.name)}</div>
           <div class="rm">${r.total ? `<span><ha-icon icon="mdi:clock-outline"></ha-icon>${mins(r.total)}</span>` : ""}<span><ha-icon icon="mdi:account-multiple-outline"></ha-icon>${r.servings}</span>${r.rating ? `<span><ha-icon icon="mdi:star"></ha-icon>${fq(r.rating)}</span>` : ""}</div></div>`).join("")}</div>${this._moreHtml(more, total, "recette")}`
-      : `<div class="empty">${q ? "Aucune recette ne correspond." : "Aucune recette pour l'instant : ajoutez-en depuis Marmiton, un lien, Mealie ou à la main."}</div>`}`;
+      : `<div class="empty">${q ? "Aucune recette ne correspond." : "Aucune recette pour l'instant : ajoutez-en depuis Marmiton, Jow, un lien, Mealie ou à la main."}</div>`}`;
   }
 
   // ---------------- Ingrédients ----------------
@@ -436,7 +436,7 @@ class HolmMyMenuCard extends HTMLElement {
     if (!st) return `<div class="empty">Calcul des statistiques…</div>`;
     if (st.error) return `<div class="empty">${esc(st.error)}</div>`;
     const size = (b) => b >= 1048576 ? `${fq(Math.round(b / 104857.6) / 10)} Mo` : `${Math.max(1, Math.round(b / 1024))} Ko`;
-    const SRC = { marmiton: "Marmiton", mealie: "Mealie", web: "Lien", manual: "À la main", manuel: "À la main" };
+    const SRC = { marmiton: "Marmiton", jow: "Jow", revisitee: "Revisitée", mealie: "Mealie", web: "Lien", manual: "À la main", manuel: "À la main" };
     const tile = (icon, n, label, sub = "") => `<div class="stile"><ha-icon icon="${icon}"></ha-icon><b>${n}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ""}</div>`;
     const wmax = Math.max(1, ...st.weeks.map((w) => w.meals));
     const thisMon = iso(monday(new Date()));
@@ -830,7 +830,7 @@ class HolmMyMenuCard extends HTMLElement {
         ${entries.length ? `<div class="row"><span class="muted">Déplacer vers</span><select class="mv"><option value="">—</option>${this._weekOptions(day, slot)}</select><label class="muted"><input type="checkbox" class="cp"> copier</label></div>` : ""}`,
         { refresh: () => {
           const root = this.shadowRoot.querySelector(".modal-root"), res = root && root.querySelector(".res"), old = root && root.querySelector(".pick");
-          if (res && res.querySelector(".mgrid") && !picked) return; // résultats Marmiton affichés : on ne les efface pas
+          if (res && res.querySelector(".mgrid") && !picked) return; // résultats Marmiton / Jow affichés : on ne les efface pas
           picked = false;
           const v = old ? old.value : "", focus = old && this.shadowRoot.activeElement === old;
           draw();
@@ -871,7 +871,8 @@ class HolmMyMenuCard extends HTMLElement {
       res.innerHTML = `${recs.length ? `<div class="rh">Mes recettes</div>${recs.map((r) => this._resRecipe(r)).join("")}` : ""}
         ${ings.length ? `<div class="rh">Ingrédients</div>${ings.map((i) => `<div class="ri2" data-ing="${i.id}"><div class="ei sm" ${i.image ? `style="background-image:url('${esc(i.image)}')"` : ""}>${i.image ? "" : `<ha-icon icon="mdi:food-apple-outline"></ha-icon>`}</div><b>${esc(i.name)}</b></div>`).join("")}` : ""}
         <div class="rh">Autres choix</div>
-        <div class="ri2" data-marmiton="1"><div class="ei sm mm"><ha-icon icon="mdi:magnify"></ha-icon></div><b>Chercher « ${esc(q)} » sur Marmiton</b></div>
+        <div class="ri2" data-web="marmiton"><div class="ei sm mm"><ha-icon icon="mdi:magnify"></ha-icon></div><b>Chercher « ${esc(q)} » sur Marmiton</b></div>
+        <div class="ri2" data-web="jow"><div class="ei sm mm jw"><ha-icon icon="mdi:magnify"></ha-icon></div><b>Chercher « ${esc(q)} » sur Jow</b></div>
         ${ings.some((i) => norm(i.name) === nq) ? "" : `<div class="ri2" data-newing="1"><div class="ei sm"><ha-icon icon="mdi:food-apple-outline"></ha-icon></div><b>Ajouter « ${esc(q)} » comme ingrédient</b></div>`}
         <div class="ri2" data-text="1"><div class="ei sm"><ha-icon icon="mdi:text"></ha-icon></div><b>Ajouter « ${esc(q)} » comme note</b></div>
         <div class="offbox">${q.length >= 3 ? `<div class="rh">Open Food Facts</div><div class="muted pad">Recherche…</div>` : ""}</div>`;
@@ -901,13 +902,13 @@ class HolmMyMenuCard extends HTMLElement {
       res.querySelectorAll("[data-ing]").forEach((b) => b.addEventListener("click", () => { onPick({ type: "ingredient", ingredient_id: b.dataset.ing }); input.value = ""; draw(); }));
       res.querySelector("[data-text]")?.addEventListener("click", () => { onPick({ type: "text", text: input.value.trim() }); input.value = ""; draw(); });
       res.querySelector("[data-newing]")?.addEventListener("click", async () => { const v = cap(input.value.trim()); const ing = await this._do(this._ws("ingredient/add", { name: v })); onPick({ type: "ingredient", ingredient_id: ing.id }); input.value = ""; draw(); });
-      res.querySelector("[data-marmiton]")?.addEventListener("click", () => this._marmitonResults(input.value.trim(), res, (rid) => { onPick({ type: "recipe", recipe_id: rid }); input.value = ""; draw(); }));
+      res.querySelectorAll("[data-web]").forEach((b) => b.addEventListener("click", () => this._webResults(input.value.trim(), res, (rid) => { onPick({ type: "recipe", recipe_id: rid }); input.value = ""; draw(); }, b.dataset.web)));
     };
     input.addEventListener("focus", () => (this._typing = true));
     input.addEventListener("blur", () => setTimeout(() => (this._typing = false), 300));
     input.addEventListener("input", draw);
     input.addEventListener("keyup", (e) => e.stopPropagation());
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && input.value.trim()) { const first = res.querySelector("[data-rec],[data-ing]"); if (first) first.click(); else res.querySelector("[data-marmiton]")?.click(); } });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && input.value.trim()) { const first = res.querySelector("[data-rec],[data-ing]"); if (first) first.click(); else res.querySelector(`[data-web="${this._webSrc()}"]`)?.click(); } });
     draw();
   }
   _offTile(p, i) {
@@ -999,12 +1000,24 @@ class HolmMyMenuCard extends HTMLElement {
   _resRecipe(r) {
     return `<div class="ri2" data-rec="${r.id}"><div class="ei sm" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}>${r.image ? "" : `<ha-icon icon="mdi:chef-hat"></ha-icon>`}</div><b>${esc(r.name)}</b><small>${mins(r.total)}</small></div>`;
   }
-  async _marmitonResults(q, box, onDone) {
-    box.innerHTML = `<div class="muted pad">Recherche sur Marmiton…</div>`;
+  _webSrc(v) {
+    if (v) { this._src = v; try { localStorage.setItem("holm_mymenu_src", v); } catch (e) { /* stockage indisponible */ } }
+    if (!this._src) { try { this._src = localStorage.getItem("holm_mymenu_src"); } catch (e) { /* stockage indisponible */ } }
+    return this._src === "jow" ? "jow" : "marmiton";
+  }
+  async _webResults(q, box, onDone, src) {
+    src = this._webSrc(src);
+    const NAME = { marmiton: "Marmiton", jow: "Jow" }[src];
+    const head = (extra = "") => `<div class="rh webh"><span class="seg mini">${["marmiton", "jow"].map((k) => `<button class="${k === src ? "on" : ""}" data-src="${k}">${{ marmiton: "Marmiton", jow: "Jow" }[k]}</button>`).join("")}</span>${extra}</div>`;
+    const bindSrc = () => box.querySelectorAll("[data-src]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); if (b.dataset.src !== src) this._webResults(q, box, onDone, b.dataset.src); }));
+    box.innerHTML = `${head()}<div class="muted pad">Recherche sur ${NAME}…</div>`; bindSrc();
+    const seq = (this._webSeq = (this._webSeq || 0) + 1);
     let res;
-    try { res = await this._ws("recipe/marmiton_search", { query: q }); } catch (e) { box.innerHTML = `<div class="muted pad">${esc(e.message || e)}</div>`; return; }
-    if (!res.length) { box.innerHTML = `<div class="muted pad">Aucune recette trouvée sur Marmiton.</div>`; return; }
-    box.innerHTML = `<div class="rh">Marmiton · ${res.length} résultats</div><div class="mgrid">${res.map((r, i) => `<div class="mc" data-i="${i}"><div class="ri" style="background-image:url('${esc(r.image)}')">${r.recipe_id ? `<i class="have">déjà importée</i>` : ""}</div><div class="rn">${esc(r.name)}</div>${r.rating ? `<div class="rm"><span><ha-icon icon="mdi:star"></ha-icon>${fq(r.rating)}${r.reviews ? ` (${r.reviews})` : ""}</span></div>` : ""}</div>`).join("")}</div>`;
+    try { res = await this._ws("recipe/web_search", { query: q, source: src }); } catch (e) { if (seq !== this._webSeq) return; box.innerHTML = `${head()}<div class="muted pad">${esc(e.message || e)}</div>`; bindSrc(); return; }
+    if (seq !== this._webSeq) return;
+    if (!res.length) { box.innerHTML = `${head()}<div class="muted pad">Aucune recette trouvée sur ${NAME}.</div>`; bindSrc(); return; }
+    box.innerHTML = `${head(`<span>${res.length} résultats</span>`)}<div class="mgrid">${res.map((r, i) => `<div class="mc" data-i="${i}"><div class="ri" style="background-image:url('${esc(r.image)}')">${r.recipe_id ? `<i class="have">déjà importée</i>` : ""}</div><div class="rn">${esc(r.name)}</div>${r.rating || r.total ? `<div class="rm">${r.rating ? `<span><ha-icon icon="mdi:star"></ha-icon>${fq(r.rating)}${r.reviews ? ` (${r.reviews})` : ""}</span>` : ""}${r.total ? `<span><ha-icon icon="mdi:clock-outline"></ha-icon>${mins(r.total)}</span>` : ""}</div>` : ""}</div>`).join("")}</div>`;
+    bindSrc();
     box.querySelectorAll(".mc").forEach((el) => el.addEventListener("click", async () => {
       const r = res[+el.dataset.i];
       if (r.recipe_id) return onDone(r.recipe_id);
@@ -1012,6 +1025,10 @@ class HolmMyMenuCard extends HTMLElement {
       try { const out = await this._ws("recipe/import", { url: r.url }); this._toast(`« ${out.recipe.name} » importée`); onDone(out.recipe.id); }
       catch (e) { el.classList.remove("busy"); this._toast(`Import impossible : ${e.message || e}`); }
     }));
+  }
+  async _duplicateRecipe(r) {
+    const copy = await this._do(this._ws("recipe/duplicate", { recipe_id: r.id }), `Copie créée : « ${r.name} (revisitée) »`);
+    if (copy) this._editRecipe(copy);
   }
 
   // ----- recette -----
@@ -1028,15 +1045,19 @@ class HolmMyMenuCard extends HTMLElement {
         ${ro ? (r.source_url ? `<div class="row act"><a class="pill" href="${esc(r.source_url)}" target="_blank" rel="noopener"><ha-icon icon="mdi:open-in-new"></ha-icon>Voir la recette d'origine</a></div>` : "") : `<div class="row act"><button class="pill main" data-x="plan"><ha-icon icon="mdi:calendar-plus"></ha-icon>Planifier</button>
           <button class="pill" data-x="fav"><ha-icon icon="mdi:heart${r.favorite ? "" : "-outline"}"></ha-icon>${r.favorite ? "Favori" : "Ajouter aux favoris"}</button>
           <button class="pill" data-x="edit"><ha-icon icon="mdi:pencil"></ha-icon>Modifier</button>
+          <button class="pill" data-x="dup" title="Créer une copie à modifier, l'original reste intact"><ha-icon icon="mdi:content-copy"></ha-icon>Dupliquer</button>
           ${r.source_url ? `<a class="pill" href="${esc(r.source_url)}" target="_blank" rel="noopener"><ha-icon icon="mdi:open-in-new"></ha-icon>Source</a>` : ""}
           <button class="pill danger" data-x="del"><ha-icon icon="mdi:delete-outline"></ha-icon></button></div>`}
+        ${r.copied_from && this._s.recipes[r.copied_from] ? `<div class="insp"><ha-icon icon="mdi:source-branch"></ha-icon>Inspirée de <button class="lnk" data-x="orig">${esc(this._s.recipes[r.copied_from].name)}</button></div>` : ""}
         <div class="cols"><div><div class="sh">Ingrédients <span class="stp"><button data-s="-1">−</button>${sv} pers.<button data-s="1">+</button></span></div>
             <ul class="ingl">${(r.ingredients || []).map((l) => `<li ${l.ingredient_id && this._s.ingredients[l.ingredient_id] ? `class="lk" data-ing="${l.ingredient_id}"` : ""}><b>${l.qty != null ? fq(l.qty * f) + (l.unit ? " " + esc(l.unit) : "") : esc(l.unit || "")}</b> ${esc(l.name)}${l.note ? ` <small>(${esc(l.note)})</small>` : ""}</li>`).join("")}</ul></div>
           <div><div class="sh">Préparation</div><ol class="steps">${(r.steps || []).map((s) => `<li>${esc(s)}</li>`).join("") || `<li class="muted">Aucune étape.</li>`}</ol></div></div>`,
         { wide: true, back });
       mb.querySelectorAll("[data-s]").forEach((b) => b.addEventListener("click", () => { sv = Math.max(1, sv + +b.dataset.s); draw(); }));
       mb.querySelectorAll("li[data-ing]").forEach((li) => li.addEventListener("click", () => this._ingModal(li.dataset.ing, ro, () => this._recipeModal(id, back, { ...opts, servings: sv }))));
+      mb.querySelector('[data-x="orig"]')?.addEventListener("click", () => this._recipeModal(r.copied_from, () => this._recipeModal(id, back, opts), opts));
       if (ro) return;
+      mb.querySelector('[data-x="dup"]').addEventListener("click", () => this._duplicateRecipe(r));
       mb.querySelector('[data-x="fav"]').addEventListener("click", async () => { r = await this._ws("recipe/save", { recipe_id: r.id, recipe: { favorite: !r.favorite } }); draw(); });
       mb.querySelector('[data-x="edit"]').addEventListener("click", () => this._editRecipe(r));
       mb.querySelector('[data-x="del"]').addEventListener("click", async () => { if (!confirm(`Supprimer « ${r.name} » ?`)) return; await this._ws("recipe/delete", { recipe_id: r.id }); this._close(); });
@@ -1125,14 +1146,15 @@ class HolmMyMenuCard extends HTMLElement {
   }
   _addRecipeModal(mode = "marmiton") {
     const mb = this._modal("Ajouter une recette", `
-      <div class="seg">${[["marmiton", "mdi:magnify", "Marmiton"], ["url", "mdi:link-variant", "Lien"], ["document", "mdi:file-pdf-box", "PDF"], ["mealie", "mdi:chef-hat", "Mealie"], ["manual", "mdi:pencil", "À la main"]].map(([k, i, l]) => `<button class="${mode === k ? "on" : ""}" data-m="${k}"><ha-icon icon="${i}"></ha-icon>${l}</button>`).join("")}</div>
+      <div class="seg">${[["marmiton", "mdi:magnify", "Recherche"], ["url", "mdi:link-variant", "Lien"], ["document", "mdi:file-pdf-box", "PDF"], ["mealie", "mdi:chef-hat", "Mealie"], ["manual", "mdi:pencil", "À la main"]].map(([k, i, l]) => `<button class="${mode === k ? "on" : ""}" data-m="${k}"><ha-icon icon="${i}"></ha-icon>${l}</button>`).join("")}</div>
       <div class="pane"></div>`, { wide: true });
     mb.querySelectorAll("[data-m]").forEach((b) => b.addEventListener("click", () => this._addRecipeModal(b.dataset.m)));
     const pane = mb.querySelector(".pane");
     if (mode === "marmiton") {
-      pane.innerHTML = `<div class="row"><input class="f grow" placeholder="Ex. lasagnes, gratin dauphinois, tarte aux pommes…"><button class="pill main">Chercher</button></div><div class="res"></div>`;
-      const inp = pane.querySelector("input"), go = () => inp.value.trim() && this._marmitonResults(inp.value.trim(), pane.querySelector(".res"), (rid) => this._recipeModal(rid));
-      pane.querySelector("button").addEventListener("click", go); inp.addEventListener("keydown", (e) => e.key === "Enter" && go()); setTimeout(() => inp.focus(), 50);
+      pane.innerHTML = `<div class="row"><span class="seg srcsel">${[["marmiton", "Marmiton"], ["jow", "Jow"]].map(([k, l]) => `<button class="${this._webSrc() === k ? "on" : ""}" data-src0="${k}">${l}</button>`).join("")}</span><input class="f grow" placeholder="Ex. lasagnes, gratin dauphinois, tarte aux pommes…"><button class="pill main">Chercher</button></div><div class="res"></div>`;
+      const inp = pane.querySelector("input"), go = () => inp.value.trim() && this._webResults(inp.value.trim(), pane.querySelector(".res"), (rid) => this._recipeModal(rid));
+      pane.querySelectorAll("[data-src0]").forEach((b) => b.addEventListener("click", () => { this._webSrc(b.dataset.src0); pane.querySelectorAll("[data-src0]").forEach((x) => x.classList.toggle("on", x === b)); go(); }));
+      pane.querySelector(".pill.main").addEventListener("click", go); inp.addEventListener("keydown", (e) => e.key === "Enter" && go()); setTimeout(() => inp.focus(), 50);
     } else if (mode === "url") {
       pane.innerHTML = `<div class="muted">Collez l'adresse d'une recette : Marmiton, 750g, CuisineAZ, Journal des Femmes… (tout site qui décrit ses recettes au format standard).</div>
         <div class="row"><input class="f grow" placeholder="https://www.marmiton.org/recettes/…"><button class="pill main">Importer</button></div>`;
@@ -1630,6 +1652,12 @@ textarea.f { resize:vertical; font-family:inherit; }
 .seg { display:flex; gap:3px; padding:3px; border-radius:12px; background:var(--sf); }
 .seg button { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; border:0; background:none; padding:8px; border-radius:9px; font-size:13px; font-weight:600; color:var(--secondary-text-color); }
 .seg button.on { background:color-mix(in srgb, var(--ac) 22%, transparent); color:var(--primary-text-color); } .seg ha-icon { --mdc-icon-size:17px; }
+.seg.mini { display:inline-flex; padding:2px; border-radius:9px; } .seg.mini button { flex:0 0 auto; padding:3px 10px; border-radius:7px; font-size:11px; text-transform:none; letter-spacing:0; }
+.rh.webh { display:flex; align-items:center; gap:10px; } .rh.webh > span:last-child:not(.seg) { font-weight:600; }
+.seg.srcsel { flex:0 0 auto; } .seg.srcsel button { padding:6px 12px; }
+.pane .webh .seg.mini { display:none; }
+.insp { display:flex; align-items:center; gap:6px; margin:2px 2px 10px; font-size:13px; color:var(--secondary-text-color); } .insp ha-icon { --mdc-icon-size:16px; color:var(--ac); }
+.ei.jw { background:color-mix(in srgb, #ff5a4e 22%, transparent); }
 .offg { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:6px; }
 .off { display:flex; align-items:center; gap:9px; padding:7px; border-radius:12px; background:var(--sf); cursor:pointer; } .off:hover { box-shadow:inset 0 0 0 1.5px var(--ac); }
 .otn { flex:1; min-width:0; display:flex; flex-direction:column; } .otn b { font-size:13px; } .otn small { font-size:11.5px; color:var(--secondary-text-color); }
@@ -1676,6 +1704,6 @@ if (!customElements.get("holm-mymenu-card")) customElements.define("holm-mymenu-
 if (!customElements.get("holm-mymenu-card-editor")) customElements.define("holm-mymenu-card-editor", HolmMyMenuCardEditor);
 window.customCards = window.customCards || [];
 if (!window.customCards.some((c) => c.type === "holm-mymenu-card"))
-  window.customCards.push({ type: "holm-mymenu-card", name: "HOLM – My Menu", description: "Menus de la semaine, recettes (Marmiton, Mealie), ingrédients (Open Food Facts) et liste de courses", preview: false });
+  window.customCards.push({ type: "holm-mymenu-card", name: "HOLM – My Menu", description: "Menus de la semaine, recettes (Marmiton, Jow, Mealie), ingrédients (Open Food Facts) et liste de courses", preview: false });
 console.info(`%c HOLM-MYMENU %c ${VERSION} `, "background:#0abfbf;color:#0b1416;border-radius:3px 0 0 3px", "background:#123;color:#fff;border-radius:0 3px 3px 0");
 })();

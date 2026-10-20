@@ -1,4 +1,4 @@
-"""Sources externes : Open Food Facts, Marmiton (et tout site schema.org Recipe), Mealie."""
+"""Sources externes : Open Food Facts, Marmiton, Jow (et tout site schema.org Recipe), Mealie."""
 from __future__ import annotations
 
 import html
@@ -10,7 +10,7 @@ from urllib.parse import quote_plus, urljoin
 import aiohttp
 
 from .const import USER_AGENT
-from .parser import parse_duration, parse_yield
+from .parser import parse_duration, parse_line, parse_yield
 
 _LOGGER = logging.getLogger(__name__)
 _TIMEOUT = aiohttp.ClientTimeout(total=20)
@@ -159,6 +159,82 @@ async def marmiton_search(session: aiohttp.ClientSession, query: str, limit: int
     return out
 
 
+# ---------------- Jow : recherche ----------------
+# Jow n'a pas d'API officielle : on utilise l'API publique non documentée de son site
+# (celle qu'appelle jow.fr pour sa propre recherche). Elle peut changer sans prévenir.
+JOW_API = "https://api.jow.fr/public/recipe/quicksearch"
+JOW_STATIC = "https://static.jow.fr/"
+JOW_CHANGED = "Jow ne répond pas comme prévu (son site a peut-être changé)"
+
+
+def jow_url(item: dict) -> str:
+    slug, rid = str(item.get("slug") or "recette"), str(item.get("id") or item.get("_id") or "")
+    return f"https://jow.fr/recipes/{slug}-{rid}"
+
+
+# Vignettes en 304x304 : la taille qu'utilise jow.fr, déjà prête sur son serveur d'images (une autre taille est
+# calculée à la volée, plusieurs secondes par photo).
+def jow_normalize(item: dict) -> dict | None:
+    if not isinstance(item, dict) or item.get("type", "recipe") != "recipe" or not (item.get("id") or item.get("_id")) or not item.get("title"):
+        return None
+    pic = item.get("editorialPictureUrl") or item.get("imageUrl") or ""
+    rating = next((b.get("value") for b in item.get("badges") or [] if isinstance(b, dict) and b.get("type") == "rating"), None)
+    if rating is None and isinstance(item.get("aggregateRating"), (int, float)) and 0 < item["aggregateRating"] <= 1:
+        rating = round(item["aggregateRating"] * 5, 1)
+    prep, cook = item.get("preparationTime"), item.get("cookingTime")
+    total = (prep or 0) + (cook or 0)
+    return {
+        "url": jow_url(item),
+        "name": html.unescape(str(item["title"])).strip(),
+        "image": (JOW_STATIC + "304x304/" + pic.lstrip("/")) if pic and not pic.startswith("http") else pic,
+        "rating": float(rating) if isinstance(rating, (int, float)) else None,
+        "reviews": item.get("totalFeedbacks") if isinstance(item.get("totalFeedbacks"), int) else None,
+        "total": total or None,
+        "description": str(item.get("description") or "").strip(),
+        "source": "jow",
+    }
+
+
+async def jow_search(session: aiohttp.ClientSession, query: str, limit: int = 18) -> list[dict]:
+    url = f"{JOW_API}?supportsPaginatedSearch=true&query={quote_plus(query)}&limit={limit}&availabilityZoneId=FR"
+    try:
+        async with session.post(url, headers={"User-Agent": _BROWSER_UA, "Accept": "application/json", "Origin": "https://jow.fr",
+                                              "Referer": "https://jow.fr/"}, timeout=_TIMEOUT) as r:
+            if r.status == 404:
+                return []          # Jow répond 404 « Recette introuvable » quand rien ne correspond
+            if r.status != 200:
+                raise SourceError(f"{JOW_CHANGED} (HTTP {r.status})")
+            data = await r.json(content_type=None)
+    except (aiohttp.ClientError, TimeoutError) as e:
+        raise SourceError("Jow ne répond pas") from e
+    except ValueError as e:
+        raise SourceError(JOW_CHANGED) from e
+    items = data.get("content") if isinstance(data, dict) else data
+    if not isinstance(items, list):
+        raise SourceError(JOW_CHANGED)
+    out, seen = [], set()
+    for it in items:
+        n = jow_normalize(it)
+        if n and n["url"] not in seen:
+            seen.add(n["url"])
+            out.append(n)
+    return out[:limit]
+
+
+def scale_lines(lines: list[str], factor: float) -> list:
+    """Multiplie les quantités (recettes Jow données pour 1 personne)."""
+    if not factor or factor == 1:
+        return lines
+    out = []
+    for ln in lines:
+        p = parse_line(ln)
+        if p["qty"] is not None:
+            q = p["qty"] * factor
+            p["qty"] = round(q) if abs(q - round(q)) < 0.05 else round(q, 2)
+        out.append(p)
+    return out
+
+
 # ---------------- import d'une recette (schema.org Recipe) ----------------
 def _find_recipe(node):
     if isinstance(node, list):
@@ -222,7 +298,7 @@ async def import_recipe_url(session: aiohttp.ClientSession, url: str) -> dict:
         "name": name,
         "image": _image(recipe.get("image")),
         "source_url": url,
-        "source": "marmiton" if "marmiton.org" in url else "web",
+        "source": "marmiton" if "marmiton.org" in url else "jow" if "jow.fr" in url else "web",
         "servings": parse_yield(recipe.get("recipeYield")) or 4,
         "prep": parse_duration(recipe.get("prepTime")),
         "cook": parse_duration(recipe.get("cookTime")),

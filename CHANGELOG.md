@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.8
+
+- **Recherche Jow** ([#10](https://github.com/kaaribou/holm-mymenu/issues/10)) : à côté de Marmiton, un sélecteur Marmiton / Jow dans « Ajouter une recette » et dans les résultats, et une ligne « Chercher sur Jow » dans le champ de recherche des repas. Import avec photo, ingrédients, étapes et temps ; les quantités (données par Jow pour une personne) sont ramenées au nombre de personnes par défaut. ⚠️ Jow n'a pas d'API officielle : cette recherche peut cesser de fonctionner si Jow modifie son site.
+- **Dupliquer une recette** ([#11](https://github.com/kaaribou/holm-mymenu/issues/11)) : copie complète « … (revisitée) », ouverte directement en modification, avec un lien « Inspirée de » vers l'original, qui reste intact.
+- Unité « pinc. » reconnue comme une pincée.
+
 ## 1.1.7
 
 - **Export vers Mealie** : une toque discrète sur la fiche d'une recette l'envoie vers Mealie. Une recette web est importée par Mealie depuis sa page d'origine (photo, étapes, temps) ; une recette PDF ou saisie à la main est envoyée au format `schema.org/Recipe` avec sa photo. Pas de doublon : une recette déjà présente dans Mealie s'ouvre directement.

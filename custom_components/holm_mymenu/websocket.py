@@ -15,7 +15,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import CONF_MEALIE_TOKEN, CONF_MEALIE_URL, DOMAIN, SIGNAL_UPDATED, SLOTS
-from .sources import SourceError, import_recipe_url, marmiton_search, mealie_export, mealie_recipe, mealie_recipes, off_product, off_search
+from .sources import SourceError, import_recipe_url, jow_search, marmiton_search, scale_lines, mealie_export, mealie_recipe, mealie_recipes, off_product, off_search
 from .mailer import MailError, build_bodies, send_mail, smtp_settings
 from .store import MenuStore, gather_limited
 from .shopping_period import shopping_period
@@ -42,7 +42,7 @@ def _err(connection, msg, e: Exception) -> None:
 @callback
 def async_register(hass: HomeAssistant) -> None:
     for fn in (ws_subscribe, ws_ing_search, ws_ing_add, ws_ing_update, ws_ing_delete, ws_ing_merge, ws_recipe_get, ws_marmiton,
-               ws_import, ws_recipe_save, ws_recipe_delete, ws_plan_set, ws_plan_add, ws_plan_move, ws_shop_generate, ws_shop_add,
+               ws_web_search, ws_recipe_duplicate, ws_import, ws_recipe_save, ws_recipe_delete, ws_plan_set, ws_plan_add, ws_plan_move, ws_shop_generate, ws_shop_add,
                ws_shop_toggle, ws_shop_toggle_group, ws_shop_remove_group, ws_shop_remove, ws_shop_update, ws_aisle_create, ws_aisle_update, ws_aisle_delete, ws_shop_restore, ws_mealie_list, ws_mealie_import, ws_mealie_export, ws_contact_save, ws_contact_delete,
                ws_shop_send, ws_stats, ws_image_upload, ws_barcode, ws_mail_info, ws_calendar_export, ws_document_upload_start,
                ws_document_upload_chunk, ws_document_upload_finish, ws_document_upload_cancel,
@@ -161,6 +161,34 @@ async def ws_marmiton(hass, connection, msg):
     connection.send_result(msg["id"], res)
 
 
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/recipe/web_search", vol.Required("query"): str,
+                                  vol.Optional("source", default="marmiton"): vol.In(["marmiton", "jow"])})
+@websocket_api.async_response
+async def ws_web_search(hass, connection, msg):
+    store = _store(hass)
+    fn = jow_search if msg["source"] == "jow" else marmiton_search
+    try:
+        res = await fn(async_get_clientsession(hass), msg["query"])
+    except SourceError as e:
+        return _err(connection, msg, e)
+    for r in res:
+        ex = store.find_recipe_by_url(r["url"])
+        r["recipe_id"] = ex["id"] if ex else None
+    connection.send_result(msg["id"], res)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/recipe/duplicate", vol.Required("recipe_id"): str})
+@websocket_api.async_response
+async def ws_recipe_duplicate(hass, connection, msg):
+    store = _store(hass)
+    try:
+        rec = await store.duplicate_recipe(msg["recipe_id"])
+    except KeyError:
+        return connection.send_error(msg["id"], "not_found", "Recette introuvable")
+    store.changed("recipes")
+    connection.send_result(msg["id"], rec)
+
+
 @websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/recipe/import", vol.Required("url"): str})
 @websocket_api.async_response
 async def ws_import(hass, connection, msg):
@@ -173,6 +201,10 @@ async def ws_import(hass, connection, msg):
         data = await import_recipe_url(session, url)
     except SourceError as e:
         return _err(connection, msg, e)
+    if data.get("source") == "jow" and (data.get("servings") or 1) < store.servings:
+        # Jow décrit ses recettes pour 1 personne : on les ramène au nombre de personnes du foyer
+        data["lines"] = scale_lines(data["lines"], store.servings / (data.get("servings") or 1))
+        data["servings"] = store.servings
     rec = store.save_recipe(data)
     await store.cache_image(session, rec)
     store.changed("recipes")

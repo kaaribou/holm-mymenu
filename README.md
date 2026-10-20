@@ -6,7 +6,7 @@
 
 **Les menus de la semaine, vos recettes et la liste de courses, directement dans Home Assistant.**
 
-HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en plus simple. Vous gardez vos recettes, vous planifiez le midi et le soir, et la liste de courses se fait toute seule. Les recettes viennent de **Marmiton**, d'un simple lien ou de votre **Mealie**. Les produits viennent d'**Open Food Facts**, avec leur photo et leur fiche complète.
+HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en plus simple. Vous gardez vos recettes, vous planifiez le midi et le soir, et la liste de courses se fait toute seule. Les recettes viennent de **Marmiton**, de **Jow**, d'un simple lien ou de votre **Mealie**. Les produits viennent d'**Open Food Facts**, avec leur photo et leur fiche complète.
 
 > ✨ **Une seule carte pour tout faire, zéro YAML.** La carte est fournie par l'intégration : aucune ressource Lovelace à ajouter.
 
@@ -25,10 +25,11 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
   - glisser un repas sur un autre pour les échanger, avec Ctrl pour copier ;
   - nombre de personnes réglable repas par repas.
 - 📖 **Recettes** :
-  - **recherche Marmiton**, puis choix du résultat : la recette est importée avec sa photo, ses ingrédients et ses étapes ;
+  - **recherche Marmiton ou Jow**, puis choix du résultat : la recette est importée avec sa photo, ses ingrédients et ses étapes ;
   - import depuis **n'importe quel lien** de recette (tous les sites qui publient le format schema.org) ;
   - import de vos recettes **Mealie**, et export vers Mealie des recettes trouvées ailleurs (Marmiton, lien, PDF, à la main) ;
-  - saisie à la main, favoris, portions ajustables.
+  - saisie à la main, favoris, portions ajustables ;
+  - **dupliquer une recette** pour en faire une version revisitée, sans toucher à l'original.
 - 🥫 **Ingrédients reliés à vos recettes** :
   - chaque ligne d'une recette est comprise (« 600 g de bœuf haché » donne 600 g de *Bœuf haché*) et reliée à votre base ;
   - le rayon est deviné automatiquement.
@@ -144,7 +145,7 @@ Cinq onglets : **Semaine**, **Recettes**, **Ingrédients**, **Courses** et **Sta
 Touchez un repas pour le remplir. Le champ de recherche propose en même temps :
 
 1. vos recettes et vos ingrédients ;
-2. une recherche Marmiton ;
+2. une recherche Marmiton ou Jow ;
 3. des produits Open Food Facts ;
 4. l'ajout d'un ingrédient ou d'une note libre.
 
@@ -172,9 +173,23 @@ show_frame: false
 
 Bouton **Ajouter** de l'onglet Recettes :
 
-- **Marmiton** : tapez « lasagnes », choisissez un résultat, c'est importé.
+- **Recherche** : choisissez **Marmiton** ou **Jow**, tapez « lasagnes », choisissez un résultat, c'est importé. Vous pouvez passer d'un site à l'autre sans retaper la recherche.
 - **Lien** : collez l'adresse d'une recette, de Marmiton ou d'un autre site qui publie le format schema.org (la plupart des sites de cuisine).
 - **Mealie** : cochez les recettes à importer (adresse et jeton dans les options de l'intégration). Les recettes déjà importées sont signalées.
+
+### Recettes Jow
+
+Les recettes [Jow](https://jow.fr) sont importées avec leur photo, leurs ingrédients, leurs étapes et leurs temps. Jow les décrit pour une personne : HOLM ramène les quantités au nombre de personnes par défaut de l'intégration (4 si vous ne l'avez pas changé).
+
+![Recherche Jow](docs/images/recherche-jow.jpg)
+
+> ⚠️ **Jow ne propose pas d'API officielle.** La recherche passe par l'interface publique, non documentée, qu'utilise le site jow.fr lui-même. Jow peut la modifier **à tout moment et sans prévenir** : la recherche Jow peut alors cesser de fonctionner jusqu'à la mise à jour suivante de HOLM My Menu. Vos recettes déjà importées, elles, ne sont pas touchées. Le même risque existe, à moindre échelle, pour la page de recherche Marmiton.
+
+### Dupliquer une recette
+
+Sur la fiche d'une recette, **Dupliquer** crée une copie complète (ingrédients, étapes, temps, portions, photo) nommée « … (revisitée) » et l'ouvre aussitôt en modification : renommez-la et adaptez-la. L'original reste intact, et la copie affiche un lien **Inspirée de …** vers lui. Les repas déjà planifiés gardent la recette d'origine.
+
+![Une recette revisitée](docs/images/dupliquer.jpg)
 
 ### Envoyer une recette vers Mealie
 
@@ -290,7 +305,7 @@ L'onglet **Stats** (ou une carte dédiée avec `view: stats`) montre :
 - les **recettes les plus planifiées**, avec le nombre de fois et la dernière date ; un toucher ouvre la recette ;
 - les **ingrédients les plus utilisés** (selon les recettes planifiées) ;
 - les **repas planifiés par semaine** sur les 8 dernières semaines ;
-- l'origine des recettes (Marmiton, Mealie, lien, à la main).
+- l'origine des recettes (Marmiton, Jow, Mealie, lien, revisitée, à la main).
 
 Le compteur est conservé indéfiniment, même quand l'historique du planning est nettoyé.
 
@@ -346,6 +361,9 @@ Open Food Facts est un service gratuit, parfois saturé. Réessayez un peu plus 
 **Une recette Marmiton ne s'importe pas.**
 Marmiton peut changer sa page. Essayez l'import par **Lien** ; sinon, ouvrez une issue avec l'adresse de la recette.
 
+**La recherche Jow ne répond plus.**
+Jow n'a pas d'API officielle et peut changer la sienne sans prévenir (voir [Recettes Jow](#recettes-jow)). Essayez l'import par **Lien** avec l'adresse d'une recette jow.fr, et ouvrez une issue : la recherche sera adaptée.
+
 **L'export calendrier refuse une mise à jour ou une suppression.**
 Le calendrier cible doit permettre l'opération demandée. Essayez le mode d'ajout des événements manquants ou vérifiez les droits du calendrier dans Home Assistant. La suppression d'anciens événements HOLM exige une confirmation explicite.
 
@@ -383,7 +401,7 @@ HOLM My Menu vous fait gagner du temps chaque semaine ? Vous pouvez m'offrir une
 ## Crédits & licence
 
 - Données produits : [Open Food Facts](https://fr.openfoodfacts.org) (licence ODbL).
-- Recettes : [Marmiton](https://www.marmiton.org) et les sites d'origine, pour votre usage personnel ; [Mealie](https://mealie.io) pour l'import et l'export.
+- Recettes : [Marmiton](https://www.marmiton.org), [Jow](https://jow.fr) (non affilié, interface non officielle) et les sites d'origine, pour votre usage personnel ; [Mealie](https://mealie.io) pour l'import et l'export.
 - Code : licence **MIT** — © kaaribou.
 
 Voir le [CHANGELOG](CHANGELOG.md).
