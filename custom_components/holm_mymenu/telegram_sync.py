@@ -9,18 +9,19 @@ import html
 import logging
 import re
 import unicodedata
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.storage import Store
 
 import voluptuous as vol
 from homeassistant.core import callback, SupportsResponse
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers import config_validation as cv
 from .const import DOMAIN, SIGNAL_UPDATED
 from .parser import to_base
 from .shopping_groups import shopping_groups
-from .shopping_period import shopping_period
+from .shopping_period import parse_range, shopping_period
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,7 +49,22 @@ def register_shopping_services(hass):
         store.shopping_toggle(item_id, call.data["checked"])
         store.changed("shopping")
 
+    async def generate_list(call):
+        """Génère la liste pour une période (par défaut la semaine en cours), comme le bouton Générer."""
+        store = _current()
+        today = dt_util.now().date()
+        start = call.data.get("start") or (today - timedelta(days=today.weekday()))
+        end = call.data.get("end") or (start + timedelta(days=6))
+        try:
+            parse_range(start.isoformat(), end.isoformat())
+        except ValueError as err:
+            raise HomeAssistantError(str(err)) from err
+        store.generate_shopping(start.isoformat(), end.isoformat())
+        store.changed("shopping")
+
     hass.services.async_register(DOMAIN, "get_shopping_list", get_list, supports_response=SupportsResponse.ONLY)
+    hass.services.async_register(DOMAIN, "generate_shopping_list", generate_list,
+                                 schema=vol.Schema({vol.Optional("start"): cv.date, vol.Optional("end"): cv.date}))
     hass.services.async_register(DOMAIN, "set_shopping_item", set_item,
                                  schema=vol.Schema({vol.Required("item_id"): cv.string,
                                                     vol.Required("checked"): cv.boolean}))

@@ -18,7 +18,7 @@ from .const import CONF_MEALIE_TOKEN, CONF_MEALIE_URL, DOMAIN, SIGNAL_UPDATED, S
 from .sources import SourceError, import_recipe_url, jow_search, marmiton_search, scale_lines, mealie_export, mealie_recipe, mealie_recipes, off_product, off_search
 from .mailer import MailError, build_bodies, send_mail, smtp_settings
 from .store import MenuStore, gather_limited
-from .shopping_period import shopping_period
+from .shopping_period import parse_range, shopping_period
 from .calendar_export import export_to_calendar
 from .document_import import analyze, DocumentImportError
 
@@ -278,6 +278,11 @@ async def ws_plan_move(hass, connection, msg):
 # API COURSES : générer à partir des recettes sans perdre les ajouts manuels.
 async def ws_shop_generate(hass, connection, msg):
     store = _store(hass)
+    try:
+        parse_range(msg["start"], msg["end"])   # semaine ou dates libres (#12), 31 jours au plus
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_range", str(err))
+        return
     store.generate_shopping(msg["start"], msg["end"])
     store.changed("shopping")
     connection.send_result(msg["id"])

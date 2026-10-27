@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.9
+
+- **Liste de courses entre deux dates** ([#12](https://github.com/kaaribou/holm-mymenu/issues/12)) : dans l'onglet Courses, un choix **Semaine / Dates**. En mode Dates, choisissez **Du** et **Au** (31 jours au maximum) pour préparer par exemple un week-end prolongé du samedi au mardi, à cheval sur deux semaines.
+- La période s'affiche partout avec le bon libellé : « Semaine du … » pour une semaine du lundi au dimanche, sinon « Courses du … au … » (liste, copie, e-mail, Telegram, notifications, rappels).
+- Nouvelle action **`holm_mymenu.generate_shopping_list`** (`start`, `end` facultatifs, semaine en cours par défaut) pour générer la liste depuis une automatisation.
+- L'intégration refuse une période inversée ou de plus de 31 jours.
+
 ## 1.1.8
 
 - **Recherche Jow** ([#10](https://github.com/kaaribou/holm-mymenu/issues/10)) : à côté de Marmiton, un sélecteur Marmiton / Jow dans « Ajouter une recette » et dans les résultats, et une ligne « Chercher sur Jow » dans le champ de recherche des repas. Import avec photo, ingrédients, étapes et temps ; les quantités (données par Jow pour une personne) sont ramenées au nombre de personnes par défaut. ⚠️ Jow n'a pas d'API officielle : cette recherche peut cesser de fonctionner si Jow modifie son site.

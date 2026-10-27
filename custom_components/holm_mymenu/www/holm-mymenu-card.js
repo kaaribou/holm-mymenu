@@ -5,7 +5,7 @@
  *   today_slots: [midi, soir]   list_height: 620   show_frame: false
  */
 (() => {
-const VERSION = "1.1.8";
+const VERSION = "1.1.9";
 // Shared by the Telegram sharing dialog and the calendar export dialog.
 const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v == null ? d : v; } catch (_) { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
@@ -14,6 +14,15 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 const monday = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); const k = (x.getDay() + 6) % 7; return addDays(x, -k); };
 const fdate = (d, o) => d.toLocaleDateString("fr-FR", o);
+const SHOP_MAX_DAYS = 31;   // même limite que l'intégration
+// libellé d'une période de courses : « semaine du … » pour un lundi → dimanche, sinon « du … au … » (#12)
+const shopRange = (start, end, long = false) => {
+  const a = typeof start === "string" ? new Date(start + "T00:00") : start, b = typeof end === "string" ? new Date(end + "T00:00") : end;
+  const o = long ? { day: "numeric", month: "long" } : { weekday: "short", day: "numeric", month: "short" };
+  if (a.getDay() === 1 && Math.round((b - a) / 864e5) === 6) return `semaine du ${fdate(a, { day: "numeric", month: long ? "long" : "short" })}`;
+  if (iso(a) === iso(b)) return `le ${fdate(a, o)}`;
+  return `du ${fdate(a, o)} au ${fdate(b, o)}`;
+};
 const mins = (m) => (!m ? "" : m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? String(m % 60).padStart(2, "0") : ""}` : `${m} min`);
 const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const SLOT_LBL = { midi: "Midi", soir: "Soir" };
@@ -194,9 +203,30 @@ class HolmMyMenuCard extends HTMLElement {
       case "reminder-toggle": { const r=(this._s.reminders||[]).find(x=>x.id===d.id); if(r) return this._ws("reminder/save",{reminder_id:r.id,reminder:{...r,enabled:!r.enabled}}); return; }
       case "reminder-delete": if(confirm("Supprimer ce rappel ?")) return this._ws("reminder/delete",{reminder_id:d.id}); return;
       case "shop-gen": {
+        if (this._shopMode === "dates") {
+          const [f, t] = this._shopDates();
+          if (t < f) return this._toast("La date de fin est avant la date de début");
+          if (Math.round((t - f) / 864e5) + 1 > SHOP_MAX_DAYS) return this._toast(`Période trop longue (${SHOP_MAX_DAYS} jours au maximum)`);
+          await this._do(this._ws("shopping/generate", { start: iso(f), end: iso(t) }), "Liste de courses générée");
+          return;
+        }
         const st = this._shopWeek || monday(new Date());
         await this._do(this._ws("shopping/generate", { start: iso(st), end: iso(addDays(st, 6)) }), "Liste de courses générée");
         return;
+      }
+      case "shop-mode": {
+        if (this._shopMode !== "dates" && d.m === "dates" && !this._shopFrom) {   // dates libres : partir de la semaine affichée
+          const w0 = this._shopWeek || monday(new Date());
+          this._shopFrom = w0; this._shopTo = addDays(w0, 6);
+        }
+        this._shopMode = d.m; return this._render();
+      }
+      case "shop-from": case "shop-to": {
+        if (!el.value) return;
+        const v = new Date(el.value + "T00:00");
+        if (a === "shop-from") { const len = this._shopTo && this._shopFrom ? Math.round((this._shopTo - this._shopFrom) / 864e5) : 6; this._shopFrom = v; if (!this._shopTo || this._shopTo < v) this._shopTo = addDays(v, Math.max(0, len)); }
+        else this._shopTo = v;
+        return this._render();
       }
       case "shop-week-prev": this._shopWeek = addDays(this._shopWeek || monday(new Date()), -7); return this._render();
       case "shop-week-next": this._shopWeek = addDays(this._shopWeek || monday(new Date()), 7); return this._render();
@@ -562,16 +592,29 @@ class HolmMyMenuCard extends HTMLElement {
   // Liste de courses : regroupement visuel, modification/suppression sur une
   // seule ligne et rayons personnalisés ; ne pas modifier les recettes sources.
   // COURSES : les lignes regroupées conservent les IDs des ingrédients issus des recettes.
+  _shopDates() {
+    const w0 = this._shopWeek || monday(new Date());
+    return [this._shopFrom || w0, this._shopTo || addDays(this._shopFrom || w0, 6)];
+  }
   _shopView() {
     const s = this._s, sh = s.shopping || {}, items = sh.items || [];
     const w0 = this._shopWeek || monday(new Date()), w1 = addDays(w0, 6);
+    const dates = this._shopMode === "dates", [df, dt] = this._shopDates();
+    const ndays = Math.round((dt - df) / 864e5) + 1;
     const viewItems = sh.groups || items;
     const groups = s.aisles.map(([k, l]) => [l, viewItems.filter((i) => (i.aisle || "autre") === k)]).filter((g) => g[1].length);
     const done = items.filter((i) => i.checked).length;
-    const rng = sh.range ? `Générée pour la semaine du ${fdate(new Date(sh.range.start + "T00:00"), { day: "numeric", month: "short" })}` : "";
-    return `<div class="bar"><button class="ib" data-act="shop-week-prev"><ha-icon icon="mdi:chevron-left"></ha-icon></button>
+    const lab = sh.range ? shopRange(sh.range.start, sh.range.end) : "";
+    const rng = !lab ? "" : lab.startsWith("semaine") ? `Générée pour la ${lab}` : lab.startsWith("le ") ? `Générée pour ${lab}` : `Générée ${lab}`;
+    const seg = `<span class="seg mini shopmode">${[["week", "Semaine"], ["dates", "Dates"]].map(([k, l]) => `<button class="${(dates ? "dates" : "week") === k ? "on" : ""}" data-act="shop-mode" data-m="${k}">${l}</button>`).join("")}</span>`;
+    const picker = dates
+      ? `<div class="wk dates"><label>Du <input type="date" class="f dt" data-act="shop-from" data-ev="change" value="${iso(df)}"></label>
+          <label>au <input type="date" class="f dt" data-act="shop-to" data-ev="change" value="${iso(dt)}" min="${iso(df)}" max="${iso(addDays(df, SHOP_MAX_DAYS - 1))}"></label>
+          <small class="${ndays < 1 || ndays > SHOP_MAX_DAYS ? "bad" : ""}">${ndays < 1 ? "dates inversées" : ndays + " jour" + (ndays > 1 ? "s" : "")}</small></div>`
+      : `<button class="ib" data-act="shop-week-prev"><ha-icon icon="mdi:chevron-left"></ha-icon></button>
         <div class="wk">Semaine du ${fdate(w0, { day: "numeric", month: "short" })} au ${fdate(w1, { day: "numeric", month: "short" })}</div>
-        <button class="ib" data-act="shop-week-next"><ha-icon icon="mdi:chevron-right"></ha-icon></button>
+        <button class="ib" data-act="shop-week-next"><ha-icon icon="mdi:chevron-right"></ha-icon></button>`;
+    return `<div class="bar shopbar">${seg}${picker}
         <button class="pill main" data-act="shop-gen"><ha-icon icon="mdi:cart-arrow-down"></ha-icon>Générer</button></div>
       <div class="bar"><input class="shop-add" placeholder="Ajouter un article (Entrée)…"><button class="pill" data-act="shop-category"><ha-icon icon="mdi:shape-plus"></ha-icon>Rayons</button>${(sh.excluded || []).length ? `<button class="pill" data-act="shop-restore" title="Voir et restaurer les articles retirés">Articles retirés (${sh.excluded.length})</button>` : ""}</div>
       ${items.length ? `<div class="shopmeta">${rng}${rng ? " · " : ""}${done}/${items.length} pris
@@ -582,7 +625,7 @@ class HolmMyMenuCard extends HTMLElement {
             <span class="cb"><ha-icon icon="mdi:check"></ha-icon></span><b>${esc(i.name)}</b><span class="q">${esc(i.display || "")}</span>
             ${(i.items || [i]).some(x => x.sources?.length) ? `<small>${esc([...new Set((i.items || [i]).flatMap(x => x.sources || []))].slice(0, 2).join(", "))}</small>` : (i.items || [i]).some(x => x.manual) ? `<small>ajouté</small>` : "<small></small>"}
             <button class="ib" data-act="shop-edit" data-ids='${JSON.stringify(i.ids || [i.id])}' title="Modifier"><ha-icon icon="mdi:pencil-outline"></ha-icon></button><button class="x" data-act="shop-del-group" data-ids='${JSON.stringify(i.ids || [i.id])}' ><ha-icon icon="mdi:close"></ha-icon></button></div>`).join("")}</div>`).join("")}`
-      : `<div class="empty">La liste est vide. Choisissez une semaine et touchez <b>Générer</b> : les ingrédients des repas prévus sont additionnés et rangés par rayon.</div>`}`;
+      : `<div class="empty">La liste est vide. Choisissez une semaine (ou des dates) et touchez <b>Générer</b> : les ingrédients des repas prévus sont additionnés et rangés par rayon.</div>`}`;
   }
 
   _restoreShopModal() {
@@ -590,7 +633,7 @@ class HolmMyMenuCard extends HTMLElement {
     const excluded = sh.excluded || [];
     const details = sh.excluded_details || {};
     const mb = this._modal("Articles retirés", `
-      <div class="muted">Ces articles ne seront pas ajoutés à nouveau lors de la génération de cette semaine. Les recettes restent inchangées.</div>
+      <div class="muted">Ces articles ne seront pas ajoutés à nouveau lors de la génération de cette période. Les recettes restent inchangées.</div>
       <div class="clist">${excluded.map(key => {
         const item = details[key] || {};
         const name = item.name || key.split("|")[0];
@@ -662,7 +705,7 @@ class HolmMyMenuCard extends HTMLElement {
   // PARTAGE : conserver la période sélectionnée et les quantités de la liste.
   _shopText(withChecked = false) {
     const s = this._s, sh = s.shopping || {}, items = (sh.groups || sh.items || []).filter((i) => withChecked || !i.checked);
-    const head = sh.range ? `Liste de courses — semaine du ${fdate(new Date(sh.range.start + "T00:00"), { day: "numeric", month: "long" })}` : "Liste de courses";
+    const head = sh.range ? `Liste de courses — ${shopRange(sh.range.start, sh.range.end, true)}` : "Liste de courses";
     const parts = s.aisles.map(([k, l]) => [l, items.filter((i) => (i.aisle || "autre") === k)]).filter((g) => g[1].length)
       .map(([l, its]) => `${l.toUpperCase()}\n${its.sort((a, b) => a.name.localeCompare(b.name, "fr")).map((i) => `- ${i.name}${i.display ? ` : ${i.display}` : ""}`).join("\n")}`);
     return `${head}\n\n${parts.join("\n\n") || "(liste vide)"}\n\n— HOLM My Menu`;
@@ -1441,6 +1484,9 @@ button { font:inherit; color:inherit; cursor:pointer; }
 @container (max-width: 560px) { .tab span { display:none; } .tab { padding:8px 11px; } }
 .bar { display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
 .wk { font-weight:600; font-size:14px; flex:1; text-align:center; min-width:140px; }
+.wk.dates { display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; font-weight:500; }
+.wk.dates label { display:inline-flex; align-items:center; gap:6px; } .wk.dates .f.dt { flex:0 0 auto; width:auto; padding:6px 8px; font-size:13px; color-scheme:light dark; }
+.wk.dates small { color:var(--secondary-text-color); font-size:12px; } .wk.dates small.bad { color:var(--error-color, #e57373); }
 .ib { width:34px; height:34px; border-radius:10px; border:0; background:var(--sf); display:grid; place-items:center; flex:none; }
 .ib.on { color:#e05a8a; }
 .ib ha-icon { --mdc-icon-size:20px; }

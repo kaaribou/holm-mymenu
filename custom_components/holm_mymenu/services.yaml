@@ -15,3 +15,18 @@ set_shopping_item:
       required: true
       selector:
         boolean:
+generate_shopping_list:
+  name: Générer la liste de courses
+  description: Additionne les ingrédients des repas prévus sur la période (semaine en cours par défaut, 31 jours au maximum).
+  fields:
+    start:
+      name: Du
+      required: false
+      selector:
+        date:
+    end:
+      name: Au
+      description: Par défaut, 6 jours après le début.
+      required: false
+      selector:
+        date:

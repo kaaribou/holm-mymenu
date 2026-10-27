@@ -39,7 +39,7 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
   - le Nutri-Score, l'Éco-Score et NOVA ;
   - les valeurs nutritionnelles, la composition, les allergènes et les labels.
 - 🛒 **Liste de courses** :
-  - générée depuis la semaine choisie, avec les quantités mises à l'échelle et additionnées (1 l + 30 cl de lait = 1,3 l) ;
+  - générée pour la semaine choisie **ou entre deux dates** (un week-end prolongé du samedi au mardi, par exemple), avec les quantités mises à l'échelle et additionnées (1 l + 30 cl de lait = 1,3 l) ;
   - rangée par rayon, avec des articles ajoutés à la main et des cases à cocher en magasin ;
   - **envoi par e-mail à plusieurs personnes** grâce au carnet d'adresses, par Telegram et/ou en notification sur les téléphones ; copie ou vidage en un geste ;
   - regroupement des variantes d'ingrédients (œufs, lardons, beurre doux…), catégories personnalisées, exclusions temporaires par semaine et restauration des articles ;
@@ -243,6 +243,8 @@ Dans la fiche d'une recette, vous pouvez :
 | ![Courses](docs/images/courses.jpg) | ![Envoi](docs/images/envoi.jpg) |
 
 - Choisissez la semaine et touchez **Générer** : les ingrédients des repas prévus sont mis à l'échelle du nombre de personnes, additionnés et rangés par rayon.
+- **Courses sur plusieurs jours, à cheval sur deux semaines** : passez de **Semaine** à **Dates**, choisissez **Du** et **Au** (31 jours au maximum), puis **Générer**. La période choisie (« du sam. 31 oct. au mar. 3 nov. ») s'affiche dans la liste et dans tous les envois : e-mail, Telegram, notifications et rappels.
+- Depuis une automatisation, l'action `holm_mymenu.generate_shopping_list` génère la liste pour la semaine en cours, ou pour les dates indiquées (`start`, `end`).
 - Les articles déjà cochés et ceux ajoutés à la main sont conservés quand vous régénérez la liste.
 - **Envoyer par mail** ouvre la fenêtre d'envoi :
   - un **carnet d'adresses** (Marie, Paul, Léa…) : cochez les personnes, ajoutez-en ou retirez-en ; vos choix sont retenus pour la fois suivante ;
@@ -250,8 +252,8 @@ Dans la fiche d'une recette, vous pouvez :
   - les **téléphones et tablettes** (entités de notification) peuvent aussi être cochés : ils reçoivent la liste en notification ;
   - **Ouvrir ma messagerie** prépare le même message dans la messagerie de l'appareil, avec les adresses cochées.
 - Les articles similaires sont regroupés pour l'affichage, sans perdre les entrées d'origine : par exemple **œuf/œufs**, **lardon/lardons/lardon nature ou fumé** et **beurre/beurre doux**. Les quantités compatibles sont additionnées.
-- Vous pouvez **personnaliser les catégories**, modifier ou retirer un article de la liste sans supprimer l'ingrédient de sa recette, et **exclure des articles pour une semaine** puis les restaurer individuellement ou tous ensemble.
-- L’envoi **Telegram** propose une liste interactive, synchronisée avec les cases à cocher dans HOLM. Le message conserve les rayons, les quantités et les dates de la semaine de courses. Les longues listes sont réparties en plusieurs messages ; les boutons agissent sur tous les articles regroupés et les messages existants sont actualisés lorsque la liste change.
+- Vous pouvez **personnaliser les catégories**, modifier ou retirer un article de la liste sans supprimer l'ingrédient de sa recette, et **exclure des articles pour une période** puis les restaurer individuellement ou tous ensemble.
+- L’envoi **Telegram** propose une liste interactive, synchronisée avec les cases à cocher dans HOLM. Le message conserve les rayons, les quantités et les dates de la période de courses. Les longues listes sont réparties en plusieurs messages ; les boutons agissent sur tous les articles regroupés et les messages existants sont actualisés lorsque la liste change.
 - **Copier** met la liste dans le presse-papiers. **Vider la liste** repart de zéro.
 
 ---
