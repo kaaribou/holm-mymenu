@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HOLM My Menu",
+        "description": "Przepisy, składniki, tygodniowe menu i lista zakupów.",
+        "data": {
+          "servings": "Domyślna liczba osób"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "HOLM My Menu jest już skonfigurowany."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcje HOLM My Menu",
+        "description": "Adres i token Mealie służą tylko do importu przepisów z Mealie (Mealie → Profil → Tokeny API).",
+        "data": {
+          "servings": "Domyślna liczba osób",
+          "mealie_url": "Adres Mealie (np. http://192.168.1.10:9925)",
+          "mealie_token": "Token API Mealie"
+        }
+      }
+    }
+  },
+  "telegram_shopping": {
+    "title": "Lista zakupów",
+    "generated": "Wygenerowano",
+    "unknown_quantity": "ilość nieokreślona",
+    "eggs": "Jajka",
+    "potatoes": "Ziemniaki",
+    "tomatoes": "Pomidory",
+    "part": "część"
+  }
+}

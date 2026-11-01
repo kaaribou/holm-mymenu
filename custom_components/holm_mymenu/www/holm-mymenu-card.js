@@ -5,7 +5,448 @@
  *   today_slots: [midi, soir]   list_height: 620   show_frame: false
  */
 (() => {
-const VERSION = "1.1.9";
+  // ---- HOLM i18n : textes écrits en français, traduits à l'affichage (en, de, es, it, nl, pt, pl) ----
+  // Langue : option `language` de la carte, sinon celle du profil Home Assistant ; anglais si la langue n'est pas traduite.
+  const HOLM_LANGS = ["en", "de", "es", "it", "nl", "pt", "pl"];
+  const LANG_NAMES = { fr: "Français", en: "English", de: "Deutsch", es: "Español", it: "Italiano", nl: "Nederlands", pt: "Português", pl: "Polski" };
+  const LOCALES = { fr: "fr-FR", en: "en-GB", de: "de-DE", es: "es-ES", it: "it-IT", nl: "nl-NL", pt: "pt-PT", pl: "pl-PL" };
+  const I18N = {
+    "Automatique (profil)": ["Automatic (profile)", "Automatisch (Profil)", "Automático (perfil)", "Automatica (profilo)", "Automatisch (profiel)", "Automático (perfil)", "Automatycznie (profil)"],
+    "Langue": ["Language", "Sprache", "Idioma", "Lingua", "Taal", "Idioma", "Język"],
+    "Titre": ["Title", "Titel", "Título", "Titolo", "Titel", "Título", "Tytuł"],
+    "Titre (optionnel)": ["Title (optional)", "Titel (optional)", "Título (opcional)", "Titolo (facoltativo)", "Titel (optioneel)", "Título (opcional)", "Tytuł (opcjonalnie)"],
+    "Nom": ["Name", "Name", "Nombre", "Nome", "Naam", "Nome", "Nazwa"],
+    "Nom affiché": ["Display name", "Anzeigename", "Nombre mostrado", "Nome visualizzato", "Weergavenaam", "Nome apresentado", "Wyświetlana nazwa"],
+    "Icône": ["Icon", "Symbol", "Icono", "Icona", "Pictogram", "Ícone", "Ikona"],
+    "Couleur": ["Colour", "Farbe", "Color", "Colore", "Kleur", "Cor", "Kolor"],
+    "Couleurs": ["Colours", "Farben", "Colores", "Colori", "Kleuren", "Cores", "Kolory"],
+    "Entité": ["Entity", "Entität", "Entidad", "Entità", "Entiteit", "Entidade", "Encja"],
+    "Entités": ["Entities", "Entitäten", "Entidades", "Entità", "Entiteiten", "Entidades", "Encje"],
+    "Chargement…": ["Loading…", "Wird geladen…", "Cargando…", "Caricamento…", "Laden…", "A carregar…", "Ładowanie…"],
+    "Erreur": ["Error", "Fehler", "Error", "Errore", "Fout", "Erro", "Błąd"],
+    "Fermer": ["Close", "Schließen", "Cerrar", "Chiudi", "Sluiten", "Fechar", "Zamknij"],
+    "Annuler": ["Cancel", "Abbrechen", "Cancelar", "Annulla", "Annuleren", "Cancelar", "Anuluj"],
+    "Enregistrer": ["Save", "Speichern", "Guardar", "Salva", "Opslaan", "Guardar", "Zapisz"],
+    "Supprimer": ["Delete", "Löschen", "Eliminar", "Elimina", "Verwijderen", "Eliminar", "Usuń"],
+    "Ajouter": ["Add", "Hinzufügen", "Añadir", "Aggiungi", "Toevoegen", "Adicionar", "Dodaj"],
+    "Monter": ["Move up", "Nach oben", "Subir", "Sposta su", "Omhoog", "Mover para cima", "W górę"],
+    "Descendre": ["Move down", "Nach unten", "Bajar", "Sposta giù", "Omlaag", "Mover para baixo", "W dół"],
+    "Afficher le cadre de la carte": ["Show the card frame", "Kartenrahmen anzeigen", "Mostrar el marco de la tarjeta", "Mostra la cornice della scheda", "Kaartkader tonen", "Mostrar a moldura do cartão", "Pokaż ramkę karty"],
+    "Indisponible": ["Unavailable", "Nicht verfügbar", "No disponible", "Non disponibile", "Niet beschikbaar", "Indisponível", "Niedostępne"],
+    "Aujourd'hui": ["Today", "Heute", "Hoy", "Oggi", "Vandaag", "Hoje", "Dziś"],
+    "Hier": ["Yesterday", "Gestern", "Ayer", "Ieri", "Gisteren", "Ontem", "Wczoraj"],
+    "Demain": ["Tomorrow", "Morgen", "Mañana", "Domani", "Morgen", "Amanhã", "Jutro"],
+    "Batterie": ["Battery", "Batterie", "Batería", "Batteria", "Batterij", "Bateria", "Bateria"],
+    "Aucune donnée sur cette période.": ["No data for this period.", "Keine Daten für diesen Zeitraum.", "No hay datos en este periodo.", "Nessun dato per questo periodo.", "Geen gegevens voor deze periode.", "Sem dados neste período.", "Brak danych w tym okresie."],
+    "à l'instant": ["just now", "gerade eben", "ahora mismo", "proprio ora", "zojuist", "agora mesmo", "przed chwilą"],
+    "il y a {n} min": ["{n} min ago", "vor {n} Min.", "hace {n} min", "{n} min fa", "{n} min geleden", "há {n} min", "{n} min temu"],
+    "il y a {n} h": ["{n} h ago", "vor {n} Std.", "hace {n} h", "{n} h fa", "{n} u geleden", "há {n} h", "{n} godz. temu"],
+    "il y a {n} j": ["{n} d ago", "vor {n} T.", "hace {n} d", "{n} g fa", "{n} d geleden", "há {n} d", "{n} dni temu"],
+    "Midi": ["Lunch", "Mittag", "Comida", "Pranzo", "Lunch", "Almoço", "Obiad"],
+    "Soir": ["Dinner", "Abend", "Cena", "Cena", "Diner", "Jantar", "Kolacja"],
+    "Menus": ["Menus", "Menüs", "Menús", "Menu", "Menu's", "Menus", "Menu"],
+    "L'intégration HOLM My Menu n'est pas installée ou pas encore chargée.": ["The HOLM My Menu integration isn't installed or hasn't loaded yet.", "Die Integration HOLM My Menu ist nicht installiert oder noch nicht geladen.", "La integración HOLM My Menu no está instalada o aún no se ha cargado.", "L'integrazione HOLM My Menu non è installata o non è ancora caricata.", "De integratie HOLM My Menu is niet geïnstalleerd of nog niet geladen.", "A integração HOLM My Menu não está instalada ou ainda não foi carregada.", "Integracja HOLM My Menu nie jest zainstalowana lub jeszcze się nie załadowała."],
+    "Semaine": ["Week", "Woche", "Semana", "Settimana", "Week", "Semana", "Tydzień"],
+    "Recettes": ["Recipes", "Rezepte", "Recetas", "Ricette", "Recepten", "Receitas", "Przepisy"],
+    "Ingrédients": ["Ingredients", "Zutaten", "Ingredientes", "Ingredienti", "Ingrediënten", "Ingredientes", "Składniki"],
+    "Courses": ["Shopping", "Einkauf", "Compra", "Spesa", "Boodschappen", "Compras", "Zakupy"],
+    "Rappels": ["Reminders", "Erinnerungen", "Recordatorios", "Promemoria", "Herinneringen", "Lembretes", "Przypomnienia"],
+    "Stats": ["Stats", "Statistik", "Estadísticas", "Statistiche", "Statistieken", "Estatísticas", "Statystyki"],
+    "Afficher la suite · {n} sur {t}": ["Show more · {n} of {t}", "Mehr anzeigen · {n} von {t}", "Mostrar más · {n} de {t}", "Mostra altro · {n} su {t}", "Meer tonen · {n} van {t}", "Mostrar mais · {n} de {t}", "Pokaż więcej · {n} z {t}"],
+    "Test du rappel effectué": ["Reminder test sent", "Erinnerungstest gesendet", "Prueba del recordatorio realizada", "Test del promemoria eseguito", "Herinneringstest verzonden", "Teste do lembrete efetuado", "Test przypomnienia wykonany"],
+    "Supprimer ce rappel ?": ["Delete this reminder?", "Diese Erinnerung löschen?", "¿Eliminar este recordatorio?", "Eliminare questo promemoria?", "Deze herinnering verwijderen?", "Eliminar este lembrete?", "Usunąć to przypomnienie?"],
+    "La date de fin est avant la date de début": ["The end date is before the start date", "Das Enddatum liegt vor dem Startdatum", "La fecha de fin es anterior a la de inicio", "La data di fine è precedente a quella di inizio", "De einddatum ligt vóór de begindatum", "A data de fim é anterior à de início", "Data końca jest przed datą początku"],
+    "Période trop longue ({n} jours au maximum)": ["Period too long ({n} days maximum)", "Zeitraum zu lang (höchstens {n} Tage)", "Periodo demasiado largo ({n} días como máximo)", "Periodo troppo lungo (massimo {n} giorni)", "Periode te lang (maximaal {n} dagen)", "Período demasiado longo (máximo {n} dias)", "Za długi okres (maks. {n} dni)"],
+    "Liste de courses générée": ["Shopping list generated", "Einkaufsliste erstellt", "Lista de la compra generada", "Lista della spesa generata", "Boodschappenlijst aangemaakt", "Lista de compras gerada", "Lista zakupów wygenerowana"],
+    "Vider toute la liste de courses ?": ["Empty the whole shopping list?", "Die ganze Einkaufsliste leeren?", "¿Vaciar toda la lista de la compra?", "Svuotare tutta la lista della spesa?", "De hele boodschappenlijst leegmaken?", "Esvaziar toda a lista de compras?", "Wyczyścić całą listę zakupów?"],
+    "Liste copiée": ["List copied", "Liste kopiert", "Lista copiada", "Lista copiata", "Lijst gekopieerd", "Lista copiada", "Lista skopiowana"],
+    "Copie impossible sur cet appareil": ["Can't copy on this device", "Kopieren auf diesem Gerät nicht möglich", "No se puede copiar en este dispositivo", "Impossibile copiare su questo dispositivo", "Kopiëren niet mogelijk op dit apparaat", "Não é possível copiar neste dispositivo", "Nie można skopiować na tym urządzeniu"],
+    "Semaine du {a} au {b}": ["Week of {a} to {b}", "Woche vom {a} bis {b}", "Semana del {a} al {b}", "Settimana dal {a} al {b}", "Week van {a} tot {b}", "Semana de {a} a {b}", "Tydzień od {a} do {b}"],
+    "Ajouter au calendrier": ["Add to calendar", "Zum Kalender hinzufügen", "Añadir al calendario", "Aggiungi al calendario", "Aan agenda toevoegen", "Adicionar ao calendário", "Dodaj do kalendarza"],
+    "Toucher un repas pour le choisir · glisser un repas sur un autre pour les échanger (Ctrl pour copier)": ["Tap a meal to choose it · drag a meal onto another to swap them (Ctrl to copy)", "Mahlzeit antippen, um sie zu wählen · auf eine andere ziehen, um sie zu tauschen (Strg zum Kopieren)", "Toca una comida para elegirla · arrastra una comida sobre otra para intercambiarlas (Ctrl para copiar)", "Tocca un pasto per sceglierlo · trascinalo su un altro per scambiarli (Ctrl per copiare)", "Tik op een maaltijd om te kiezen · sleep een maaltijd op een andere om te wisselen (Ctrl om te kopiëren)", "Toque numa refeição para a escolher · arraste uma refeição para outra para as trocar (Ctrl para copiar)", "Dotknij posiłku, aby go wybrać · przeciągnij na inny, aby zamienić (Ctrl, aby skopiować)"],
+    "{n} pers.": ["{n} serv.", "{n} Pers.", "{n} pers.", "{n} pers.", "{n} pers.", "{n} pess.", "{n} os."],
+    "Rien de prévu": ["Nothing planned", "Nichts geplant", "Nada previsto", "Niente in programma", "Niets gepland", "Nada previsto", "Nic nie zaplanowano"],
+    "Ajouter les recettes au calendrier": ["Add the recipes to the calendar", "Rezepte zum Kalender hinzufügen", "Añadir las recetas al calendario", "Aggiungi le ricette al calendario", "Recepten aan de agenda toevoegen", "Adicionar as receitas ao calendário", "Dodaj przepisy do kalendarza"],
+    "Calendrier de destination": ["Target calendar", "Zielkalender", "Calendario de destino", "Calendario di destinazione", "Doelagenda", "Calendário de destino", "Kalendarz docelowy"],
+    "Choisir un calendrier…": ["Choose a calendar…", "Kalender wählen…", "Elegir un calendario…", "Scegli un calendario…", "Kies een agenda…", "Escolher um calendário…", "Wybierz kalendarz…"],
+    "Aucun calendrier Home Assistant disponible.": ["No Home Assistant calendar available.", "Kein Home-Assistant-Kalender verfügbar.", "Ningún calendario de Home Assistant disponible.", "Nessun calendario di Home Assistant disponibile.", "Geen Home Assistant-agenda beschikbaar.", "Nenhum calendário do Home Assistant disponível.", "Brak dostępnego kalendarza Home Assistant."],
+    "Préfixe des événements": ["Event prefix", "Präfix der Termine", "Prefijo de los eventos", "Prefisso degli eventi", "Voorvoegsel van afspraken", "Prefixo dos eventos", "Prefiks wydarzeń"],
+    "Aperçu · {n} événement": ["Preview · {n} event", "Vorschau · {n} Termin", "Vista previa · {n} evento", "Anteprima · {n} evento", "Voorbeeld · {n} afspraak", "Pré-visualização · {n} evento", "Podgląd · {n} wydarzenie"],
+    "Aperçu · {n} événements": ["Preview · {n} events", "Vorschau · {n} Termine", "Vista previa · {n} eventos", "Anteprima · {n} eventi", "Voorbeeld · {n} afspraken", "Pré-visualização · {n} eventos", "Podgląd · {n} wydarzeń"],
+    "Aucune recette planifiée cette semaine.": ["No recipes planned this week.", "Keine Rezepte für diese Woche geplant.", "Ninguna receta planificada esta semana.", "Nessuna ricetta pianificata questa settimana.", "Geen recepten gepland deze week.", "Nenhuma receita planeada esta semana.", "Brak zaplanowanych przepisów w tym tygodniu."],
+    "La synchronisation recherche les événements HOLM déjà présents et évite les doublons. Les modifications et suppressions nécessitent des services pris en charge par le calendrier.": ["Syncing looks for existing HOLM events and avoids duplicates. Edits and deletions need services supported by the calendar.", "Die Synchronisierung sucht vorhandene HOLM-Termine und vermeidet Duplikate. Änderungen und Löschungen erfordern vom Kalender unterstützte Dienste.", "La sincronización busca los eventos HOLM ya existentes y evita duplicados. Las modificaciones y eliminaciones requieren servicios compatibles con el calendario.", "La sincronizzazione cerca gli eventi HOLM già presenti ed evita i doppioni. Modifiche ed eliminazioni richiedono servizi supportati dal calendario.", "De synchronisatie zoekt bestaande HOLM-afspraken en voorkomt dubbele. Wijzigen en verwijderen vereist diensten die de agenda ondersteunt.", "A sincronização procura os eventos HOLM já existentes e evita duplicados. As alterações e eliminações requerem serviços suportados pelo calendário.", "Synchronizacja wyszukuje istniejące wydarzenia HOLM i unika duplikatów. Zmiany i usuwanie wymagają usług obsługiwanych przez kalendarz."],
+    "Mode d’export": ["Export mode", "Exportmodus", "Modo de exportación", "Modalità di esportazione", "Exportmodus", "Modo de exportação", "Tryb eksportu"],
+    "Synchroniser la semaine (ajouter, modifier, supprimer)": ["Sync the week (add, edit, delete)", "Woche synchronisieren (hinzufügen, ändern, löschen)", "Sincronizar la semana (añadir, modificar, eliminar)", "Sincronizza la settimana (aggiungi, modifica, elimina)", "Week synchroniseren (toevoegen, wijzigen, verwijderen)", "Sincronizar a semana (adicionar, alterar, eliminar)", "Synchronizuj tydzień (dodaj, zmień, usuń)"],
+    "Ajouter uniquement les événements manquants": ["Only add missing events", "Nur fehlende Termine hinzufügen", "Añadir solo los eventos que faltan", "Aggiungi solo gli eventi mancanti", "Alleen ontbrekende afspraken toevoegen", "Adicionar apenas os eventos em falta", "Dodaj tylko brakujące wydarzenia"],
+    "Confirmer la synchronisation": ["Confirm sync", "Synchronisierung bestätigen", "Confirmar la sincronización", "Conferma la sincronizzazione", "Synchronisatie bevestigen", "Confirmar a sincronização", "Potwierdź synchronizację"],
+    "Les événements HOLM de cette semaine seront mis à jour. Ceux qui correspondent à des repas supprimés pourront être effacés du calendrier sélectionné. Les autres événements ne seront pas touchés.": ["This week's HOLM events will be updated. Those matching deleted meals may be removed from the selected calendar. Other events won't be touched.", "Die HOLM-Termine dieser Woche werden aktualisiert. Termine gelöschter Mahlzeiten können aus dem gewählten Kalender entfernt werden. Andere Termine bleiben unberührt.", "Los eventos HOLM de esta semana se actualizarán. Los que correspondan a comidas eliminadas podrán borrarse del calendario seleccionado. Los demás eventos no se tocarán.", "Gli eventi HOLM di questa settimana saranno aggiornati. Quelli dei pasti eliminati potranno essere cancellati dal calendario selezionato. Gli altri eventi non saranno toccati.", "De HOLM-afspraken van deze week worden bijgewerkt. Afspraken van verwijderde maaltijden kunnen uit de gekozen agenda worden gewist. Andere afspraken blijven ongemoeid.", "Os eventos HOLM desta semana serão atualizados. Os que correspondem a refeições eliminadas poderão ser apagados do calendário selecionado. Os outros eventos não serão tocados.", "Wydarzenia HOLM z tego tygodnia zostaną zaktualizowane. Te dotyczące usuniętych posiłków mogą zostać usunięte z wybranego kalendarza. Inne wydarzenia pozostaną nietknięte."],
+    "Retour": ["Back", "Zurück", "Volver", "Indietro", "Terug", "Voltar", "Wstecz"],
+    "Créer {n} événement": ["Create {n} event", "{n} Termin erstellen", "Crear {n} evento", "Crea {n} evento", "{n} afspraak maken", "Criar {n} evento", "Utwórz {n} wydarzenie"],
+    "Créer {n} événements": ["Create {n} events", "{n} Termine erstellen", "Crear {n} eventos", "Crea {n} eventi", "{n} afspraken maken", "Criar {n} eventos", "Utwórz {n} wydarzeń"],
+    "Calendrier : {c} créé(s), {u} modifié(s), {d} supprimé(s), {n} inchangé(s)": ["Calendar: {c} created, {u} updated, {d} deleted, {n} unchanged", "Kalender: {c} erstellt, {u} geändert, {d} gelöscht, {n} unverändert", "Calendario: {c} creado(s), {u} modificado(s), {d} eliminado(s), {n} sin cambios", "Calendario: {c} creati, {u} modificati, {d} eliminati, {n} invariati", "Agenda: {c} aangemaakt, {u} gewijzigd, {d} verwijderd, {n} ongewijzigd", "Calendário: {c} criado(s), {u} alterado(s), {d} eliminado(s), {n} inalterado(s)", "Kalendarz: utworzono {c}, zmieniono {u}, usunięto {d}, bez zmian {n}"],
+    "Export calendrier :": ["Calendar export:", "Kalenderexport:", "Exportación de calendario:", "Esportazione calendario:", "Agenda-export:", "Exportação do calendário:", "Eksport kalendarza:"],
+    "Calendrier :": ["Calendar:", "Kalender:", "Calendario:", "Calendario:", "Agenda:", "Calendário:", "Kalendarz:"],
+    "Sélectionne un calendrier": ["Select a calendar", "Wähle einen Kalender", "Selecciona un calendario", "Seleziona un calendario", "Kies een agenda", "Seleciona um calendário", "Wybierz kalendarz"],
+    "Rechercher une recette ou un ingrédient…": ["Search for a recipe or an ingredient…", "Rezept oder Zutat suchen…", "Buscar una receta o un ingrediente…", "Cerca una ricetta o un ingrediente…", "Zoek een recept of ingrediënt…", "Pesquisar uma receita ou um ingrediente…", "Szukaj przepisu lub składnika…"],
+    "Favoris": ["Favourites", "Favoriten", "Favoritos", "Preferiti", "Favorieten", "Favoritos", "Ulubione"],
+    "Aucune recette ne correspond.": ["No matching recipe.", "Kein passendes Rezept.", "Ninguna receta coincide.", "Nessuna ricetta corrisponde.", "Geen overeenkomend recept.", "Nenhuma receita corresponde.", "Brak pasujących przepisów."],
+    "Aucune recette pour l'instant : ajoutez-en depuis Marmiton, Jow, un lien, Mealie ou à la main.": ["No recipes yet: add some from Marmiton, Jow, a link, Mealie or by hand.", "Noch keine Rezepte: Fügen Sie welche aus Marmiton, Jow, einem Link, Mealie oder von Hand hinzu.", "Aún no hay recetas: añade desde Marmiton, Jow, un enlace, Mealie o a mano.", "Ancora nessuna ricetta: aggiungine da Marmiton, Jow, un link, Mealie o a mano.", "Nog geen recepten: voeg ze toe vanuit Marmiton, Jow, een link, Mealie of met de hand.", "Ainda sem receitas: adicione a partir do Marmiton, Jow, um link, Mealie ou à mão.", "Brak przepisów: dodaj je z Marmiton, Jow, linku, Mealie lub ręcznie."],
+    "Rechercher un ingrédient…": ["Search for an ingredient…", "Zutat suchen…", "Buscar un ingrediente…", "Cerca un ingrediente…", "Zoek een ingrediënt…", "Pesquisar um ingrediente…", "Szukaj składnika…"],
+    "{n} recette": ["{n} recipe", "{n} Rezept", "{n} receta", "{n} ricetta", "{n} recept", "{n} receita", "{n} przepis"],
+    "{n} recettes": ["{n} recipes", "{n} Rezepte", "{n} recetas", "{n} ricette", "{n} recepten", "{n} receitas", "{n} przepisów"],
+    "Aucun ingrédient « {q} ».": ["No ingredient \"{q}\".", "Keine Zutat „{q}“.", "Ningún ingrediente «{q}».", "Nessun ingrediente «{q}».", "Geen ingrediënt \"{q}\".", "Nenhum ingrediente «{q}».", "Brak składnika „{q}”."],
+    "Le chercher sur Open Food Facts": ["Look it up on Open Food Facts", "Auf Open Food Facts suchen", "Buscarlo en Open Food Facts", "Cercalo su Open Food Facts", "Zoeken op Open Food Facts", "Procurar no Open Food Facts", "Szukaj w Open Food Facts"],
+    "Aucun ingrédient pour l'instant.": ["No ingredients yet.", "Noch keine Zutaten.", "Aún no hay ingredientes.", "Ancora nessun ingrediente.", "Nog geen ingrediënten.", "Ainda sem ingredientes.", "Brak składników."],
+    "ingrédient": ["ingredient", "Zutat", "ingrediente", "ingrediente", "ingrediënt", "ingrediente", "składnik"],
+    "Fruits & légumes": ["Fruit & vegetables", "Obst & Gemüse", "Frutas y verduras", "Frutta e verdura", "Groente & fruit", "Frutas e legumes", "Owoce i warzywa"],
+    "Viandes & poissons": ["Meat & fish", "Fleisch & Fisch", "Carnes y pescados", "Carne e pesce", "Vlees & vis", "Carne e peixe", "Mięso i ryby"],
+    "Crèmerie & œufs": ["Dairy & eggs", "Milchprodukte & Eier", "Lácteos y huevos", "Latticini e uova", "Zuivel & eieren", "Laticínios e ovos", "Nabiał i jajka"],
+    "Fromages": ["Cheese", "Käse", "Quesos", "Formaggi", "Kaas", "Queijos", "Sery"],
+    "Boulangerie": ["Bakery", "Bäckerei", "Panadería", "Panetteria", "Bakkerij", "Padaria", "Pieczywo"],
+    "Épicerie": ["Groceries", "Lebensmittel", "Despensa", "Drogheria", "Kruidenierswaren", "Mercearia", "Spożywcze"],
+    "Épicerie sucrée": ["Sweet groceries", "Süßwaren", "Dulces", "Dolciumi", "Zoetwaren", "Doces", "Słodycze"],
+    "Condiments, épices & herbes": ["Condiments, spices & herbs", "Würzmittel, Gewürze & Kräuter", "Condimentos, especias y hierbas", "Condimenti, spezie ed erbe", "Smaakmakers, specerijen & kruiden", "Condimentos, especiarias e ervas", "Przyprawy i zioła"],
+    "Surgelés": ["Frozen", "Tiefkühl", "Congelados", "Surgelati", "Diepvries", "Congelados", "Mrożonki"],
+    "Boissons": ["Drinks", "Getränke", "Bebidas", "Bevande", "Dranken", "Bebidas", "Napoje"],
+    "Maison & hygiène": ["Household & hygiene", "Haushalt & Hygiene", "Hogar e higiene", "Casa e igiene", "Huishouden & verzorging", "Casa e higiene", "Dom i higiena"],
+    "Divers": ["Other", "Sonstiges", "Varios", "Varie", "Overig", "Diversos", "Różne"],
+    "Calcul des statistiques…": ["Calculating statistics…", "Statistiken werden berechnet…", "Calculando estadísticas…", "Calcolo delle statistiche…", "Statistieken berekenen…", "A calcular estatísticas…", "Obliczanie statystyk…"],
+    "Mo": ["MB", "MB", "MB", "MB", "MB", "MB", "MB"],
+    "Ko": ["KB", "KB", "KB", "KB", "KB", "KB", "KB"],
+    "Revisitée": ["Revisited", "Abgewandelt", "Versionada", "Rivisitata", "Bewerkt", "Revisitada", "Zmodyfikowany"],
+    "Lien": ["Link", "Link", "Enlace", "Link", "Link", "Link", "Link"],
+    "À la main": ["By hand", "Von Hand", "A mano", "A mano", "Met de hand", "À mão", "Ręcznie"],
+    "Votre base HOLM My Menu": ["Your HOLM My Menu database", "Ihre HOLM-My-Menu-Datenbank", "Tu base HOLM My Menu", "Il tuo database HOLM My Menu", "Uw HOLM My Menu-database", "A sua base HOLM My Menu", "Twoja baza HOLM My Menu"],
+    "Actualiser": ["Refresh", "Aktualisieren", "Actualizar", "Aggiorna", "Vernieuwen", "Atualizar", "Odśwież"],
+    "recettes": ["recipes", "Rezepte", "recetas", "ricette", "recepten", "receitas", "przepisy"],
+    "ingrédients": ["ingredients", "Zutaten", "ingredientes", "ingredienti", "ingrediënten", "ingredientes", "składniki"],
+    "repas planifiés": ["meals planned", "geplante Mahlzeiten", "comidas planificadas", "pasti pianificati", "geplande maaltijden", "refeições planeadas", "zaplanowane posiłki"],
+    "sur les 8 dernières semaines et à venir": ["over the last 8 weeks and upcoming", "in den letzten 8 Wochen und demnächst", "en las últimas 8 semanas y próximas", "nelle ultime 8 settimane e in arrivo", "de afgelopen 8 weken en komende", "nas últimas 8 semanas e próximas", "w ostatnich 8 tygodniach i nadchodzące"],
+    "occupés": ["used", "belegt", "ocupados", "occupati", "in gebruik", "ocupados", "zajęte"],
+    "{n} favori": ["{n} favourite", "{n} Favorit", "{n} favorito", "{n} preferito", "{n} favoriet", "{n} favorito", "{n} ulubiony"],
+    "{n} favoris": ["{n} favourites", "{n} Favoriten", "{n} favoritos", "{n} preferiti", "{n} favorieten", "{n} favoritos", "{n} ulubionych"],
+    "{n} jamais planifiée": ["{n} never planned", "{n} nie geplant", "{n} nunca planificada", "{n} mai pianificata", "{n} nooit gepland", "{n} nunca planeada", "{n} nigdy nie zaplanowany"],
+    "{n} jamais planifiées": ["{n} never planned", "{n} nie geplant", "{n} nunca planificadas", "{n} mai pianificate", "{n} nooit gepland", "{n} nunca planeadas", "{n} nigdy nie zaplanowanych"],
+    "{a} avec fiche produit · {b} avec photo": ["{a} with product sheet · {b} with photo", "{a} mit Produktdaten · {b} mit Foto", "{a} con ficha de producto · {b} con foto", "{a} con scheda prodotto · {b} con foto", "{a} met productfiche · {b} met foto", "{a} com ficha de produto · {b} com foto", "{a} z kartą produktu · {b} ze zdjęciem"],
+    "base {a} · {n} photos {b}": ["database {a} · {n} photos {b}", "Datenbank {a} · {n} Fotos {b}", "base {a} · {n} fotos {b}", "database {a} · {n} foto {b}", "database {a} · {n} foto's {b}", "base {a} · {n} fotos {b}", "baza {a} · {n} zdjęć {b}"],
+    "Recettes les plus planifiées": ["Most planned recipes", "Am häufigsten geplante Rezepte", "Recetas más planificadas", "Ricette più pianificate", "Meest geplande recepten", "Receitas mais planeadas", "Najczęściej planowane przepisy"],
+    "Dernière fois : {d}": ["Last time: {d}", "Zuletzt: {d}", "Última vez: {d}", "Ultima volta: {d}", "Laatste keer: {d}", "Última vez: {d}", "Ostatnio: {d}"],
+    "Planifiez des repas : les recettes les plus cuisinées apparaîtront ici.": ["Plan some meals: the most cooked recipes will appear here.", "Planen Sie Mahlzeiten: Die meistgekochten Rezepte erscheinen hier.", "Planifica comidas: aquí aparecerán las recetas más cocinadas.", "Pianifica dei pasti: qui appariranno le ricette più cucinate.", "Plan maaltijden: de meest gekookte recepten verschijnen hier.", "Planeie refeições: as receitas mais cozinhadas aparecerão aqui.", "Zaplanuj posiłki: tu pojawią się najczęściej gotowane przepisy."],
+    "Repas planifiés par semaine": ["Meals planned per week", "Geplante Mahlzeiten pro Woche", "Comidas planificadas por semana", "Pasti pianificati a settimana", "Geplande maaltijden per week", "Refeições planeadas por semana", "Zaplanowane posiłki na tydzień"],
+    "Semaine du {d} : {n} repas": ["Week of {d}: {n} meals", "Woche vom {d}: {n} Mahlzeiten", "Semana del {d}: {n} comidas", "Settimana del {d}: {n} pasti", "Week van {d}: {n} maaltijden", "Semana de {d}: {n} refeições", "Tydzień od {d}: {n} posiłków"],
+    "Ingrédients les plus utilisés": ["Most used ingredients", "Meistverwendete Zutaten", "Ingredientes más usados", "Ingredienti più usati", "Meest gebruikte ingrediënten", "Ingredientes mais usados", "Najczęściej używane składniki"],
+    "Origine des recettes": ["Recipe sources", "Herkunft der Rezepte", "Origen de las recetas", "Origine delle ricette", "Herkomst van recepten", "Origem das receitas", "Źródła przepisów"],
+    "🔔 Mes rappels": ["🔔 My reminders", "🔔 Meine Erinnerungen", "🔔 Mis recordatorios", "🔔 I miei promemoria", "🔔 Mijn herinneringen", "🔔 Os meus lembretes", "🔔 Moje przypomnienia"],
+    "Nouveau rappel": ["New reminder", "Neue Erinnerung", "Nuevo recordatorio", "Nuovo promemoria", "Nieuwe herinnering", "Novo lembrete", "Nowe przypomnienie"],
+    "Rappels ponctuels ou récurrents · Heure locale Home Assistant · Notifications Telegram et mobiles": ["One-off or recurring reminders · Home Assistant local time · Telegram and mobile notifications", "Einmalige oder wiederkehrende Erinnerungen · Home-Assistant-Ortszeit · Telegram- und Mobilbenachrichtigungen", "Recordatorios puntuales o recurrentes · Hora local de Home Assistant · Notificaciones Telegram y móviles", "Promemoria singoli o ricorrenti · Ora locale di Home Assistant · Notifiche Telegram e mobili", "Eenmalige of terugkerende herinneringen · Lokale tijd van Home Assistant · Telegram- en mobiele meldingen", "Lembretes pontuais ou recorrentes · Hora local do Home Assistant · Notificações Telegram e móveis", "Przypomnienia jednorazowe lub cykliczne · Czas lokalny Home Assistant · Powiadomienia Telegram i mobilne"],
+    "Hebdomadaire": ["Weekly", "Wöchentlich", "Semanal", "Settimanale", "Wekelijks", "Semanal", "Co tydzień"],
+    "Quotidien": ["Daily", "Täglich", "Diario", "Giornaliero", "Dagelijks", "Diário", "Codziennie"],
+    "Une fois": ["Once", "Einmalig", "Una vez", "Una volta", "Eenmalig", "Uma vez", "Jednorazowo"],
+    "Actif": ["Active", "Aktiv", "Activo", "Attivo", "Actief", "Ativo", "Aktywne"],
+    "En pause": ["Paused", "Pausiert", "En pausa", "In pausa", "Gepauzeerd", "Em pausa", "Wstrzymane"],
+    "Activer ou suspendre": ["Enable or pause", "Aktivieren oder pausieren", "Activar o pausar", "Attiva o sospendi", "Inschakelen of pauzeren", "Ativar ou suspender", "Włącz lub wstrzymaj"],
+    "Tester": ["Test", "Testen", "Probar", "Prova", "Testen", "Testar", "Testuj"],
+    "Modifier": ["Edit", "Bearbeiten", "Editar", "Modifica", "Bewerken", "Editar", "Edytuj"],
+    "Aucun rappel. Créez votre premier rappel pour les courses, les menus, les recettes ou une tâche personnalisée.": ["No reminders. Create your first reminder for shopping, menus, recipes or a custom task.", "Keine Erinnerungen. Erstellen Sie Ihre erste Erinnerung für Einkauf, Menüs, Rezepte oder eine eigene Aufgabe.", "Sin recordatorios. Crea tu primer recordatorio para la compra, los menús, las recetas o una tarea personalizada.", "Nessun promemoria. Crea il tuo primo promemoria per la spesa, i menu, le ricette o un'attività personalizzata.", "Geen herinneringen. Maak uw eerste herinnering voor boodschappen, menu's, recepten of een eigen taak.", "Sem lembretes. Crie o seu primeiro lembrete para as compras, os menus, as receitas ou uma tarefa personalizada.", "Brak przypomnień. Utwórz pierwsze przypomnienie o zakupach, menu, przepisach lub własnym zadaniu."],
+    "Modifier le rappel": ["Edit reminder", "Erinnerung bearbeiten", "Editar recordatorio", "Modifica promemoria", "Herinnering bewerken", "Editar lembrete", "Edytuj przypomnienie"],
+    "Courses de la semaine": ["Weekly shopping", "Wocheneinkauf", "Compra de la semana", "Spesa della settimana", "Weekboodschappen", "Compras da semana", "Zakupy na tydzień"],
+    "Type": ["Type", "Typ", "Tipo", "Tipo", "Type", "Tipo", "Typ"],
+    "🛒 Courses": ["🛒 Shopping", "🛒 Einkauf", "🛒 Compra", "🛒 Spesa", "🛒 Boodschappen", "🛒 Compras", "🛒 Zakupy"],
+    "📅 Menus incomplets": ["📅 Incomplete menus", "📅 Unvollständige Menüs", "📅 Menús incompletos", "📅 Menu incompleti", "📅 Onvolledige menu's", "📅 Menus incompletos", "📅 Niepełne menu"],
+    "🍳 Préparation / recette": ["🍳 Prep / recipe", "🍳 Vorbereitung / Rezept", "🍳 Preparación / receta", "🍳 Preparazione / ricetta", "🍳 Voorbereiding / recept", "🍳 Preparação / receita", "🍳 Przygotowanie / przepis"],
+    "🔔 Personnalisé": ["🔔 Custom", "🔔 Benutzerdefiniert", "🔔 Personalizado", "🔔 Personalizzato", "🔔 Aangepast", "🔔 Personalizado", "🔔 Własne"],
+    "Fréquence": ["Frequency", "Häufigkeit", "Frecuencia", "Frequenza", "Frequentie", "Frequência", "Częstotliwość"],
+    "Chaque jour": ["Every day", "Jeden Tag", "Cada día", "Ogni giorno", "Elke dag", "Todos os dias", "Codziennie"],
+    "Chaque semaine": ["Every week", "Jede Woche", "Cada semana", "Ogni settimana", "Elke week", "Todas as semanas", "Co tydzień"],
+    "Heure": ["Time", "Uhrzeit", "Hora", "Ora", "Tijd", "Hora", "Godzina"],
+    "Date du rappel": ["Reminder date", "Datum der Erinnerung", "Fecha del recordatorio", "Data del promemoria", "Datum van de herinnering", "Data do lembrete", "Data przypomnienia"],
+    "Jours de rappel": ["Reminder days", "Erinnerungstage", "Días del recordatorio", "Giorni del promemoria", "Herinneringsdagen", "Dias do lembrete", "Dni przypomnienia"],
+    "Message / consigne": ["Message / instruction", "Nachricht / Anweisung", "Mensaje / indicación", "Messaggio / istruzione", "Bericht / instructie", "Mensagem / instrução", "Wiadomość / polecenie"],
+    "📱 Notifications mobiles Home Assistant": ["📱 Home Assistant mobile notifications", "📱 Home-Assistant-Mobilbenachrichtigungen", "📱 Notificaciones móviles de Home Assistant", "📱 Notifiche mobili di Home Assistant", "📱 Mobiele meldingen van Home Assistant", "📱 Notificações móveis do Home Assistant", "📱 Powiadomienia mobilne Home Assistant"],
+    "Envoie une notification push aux téléphones ou tablettes sélectionnés. Les appareils sont repris des entités de notification Home Assistant.": ["Sends a push notification to the selected phones or tablets. Devices come from Home Assistant's notification entities.", "Sendet eine Push-Benachrichtigung an die gewählten Telefone oder Tablets. Die Geräte stammen aus den Benachrichtigungsentitäten von Home Assistant.", "Envía una notificación push a los teléfonos o tabletas seleccionados. Los dispositivos proceden de las entidades de notificación de Home Assistant.", "Invia una notifica push ai telefoni o tablet selezionati. I dispositivi provengono dalle entità di notifica di Home Assistant.", "Stuurt een pushmelding naar de gekozen telefoons of tablets. De apparaten komen uit de meldingsentiteiten van Home Assistant.", "Envia uma notificação push para os telemóveis ou tablets selecionados. Os dispositivos vêm das entidades de notificação do Home Assistant.", "Wysyła powiadomienie push na wybrane telefony lub tablety. Urządzenia pochodzą z encji powiadomień Home Assistant."],
+    "Aucune entité notify disponible.": ["No notify entity available.", "Keine notify-Entität verfügbar.", "Ninguna entidad notify disponible.", "Nessuna entità notify disponibile.", "Geen notify-entiteit beschikbaar.", "Nenhuma entidade notify disponível.", "Brak dostępnych encji notify."],
+    "Envoie un message de rappel dans les conversations ou sujets déjà configurés pour la liste de courses. Il ne remplace pas le message interactif des courses.": ["Sends a reminder message to the chats or topics already set up for the shopping list. It doesn't replace the interactive shopping message.", "Sendet eine Erinnerung in die bereits für die Einkaufsliste eingerichteten Chats oder Themen. Sie ersetzt nicht die interaktive Einkaufsnachricht.", "Envía un mensaje de recordatorio a las conversaciones o temas ya configurados para la lista de la compra. No sustituye al mensaje interactivo de la compra.", "Invia un messaggio di promemoria nelle conversazioni o argomenti già configurati per la lista della spesa. Non sostituisce il messaggio interattivo della spesa.", "Stuurt een herinnering naar de chats of onderwerpen die al voor de boodschappenlijst zijn ingesteld. Het vervangt het interactieve boodschappenbericht niet.", "Envia uma mensagem de lembrete para as conversas ou tópicos já configurados para a lista de compras. Não substitui a mensagem interativa das compras.", "Wysyła przypomnienie do czatów lub wątków skonfigurowanych dla listy zakupów. Nie zastępuje interaktywnej wiadomości z zakupami."],
+    "Conversation": ["Chat", "Chat", "Conversación", "Conversazione", "Chat", "Conversa", "Czat"],
+    "Sujet": ["Topic", "Thema", "Tema", "Argomento", "Onderwerp", "Tópico", "Wątek"],
+    "Aucune conversation enregistrée. Configure d'abord Telegram dans « Envoyer la liste de courses ».": ["No saved chat. First set up Telegram in \"Send the shopping list\".", "Kein gespeicherter Chat. Richte Telegram zuerst unter „Einkaufsliste senden“ ein.", "Ninguna conversación guardada. Configura primero Telegram en «Enviar la lista de la compra».", "Nessuna conversazione salvata. Configura prima Telegram in «Invia la lista della spesa».", "Geen opgeslagen chat. Stel Telegram eerst in bij \"Boodschappenlijst versturen\".", "Nenhuma conversa guardada. Configura primeiro o Telegram em «Enviar a lista de compras».", "Brak zapisanych czatów. Najpierw skonfiguruj Telegram w „Wyślij listę zakupów”."],
+    "Envoie le rappel par e-mail avec le serveur SMTP configuré dans Home Assistant. Sélectionne des contacts du carnet ou saisis d'autres adresses.": ["Sends the reminder by e-mail using the SMTP server set up in Home Assistant. Pick contacts from the address book or enter other addresses.", "Sendet die Erinnerung per E-Mail über den in Home Assistant eingerichteten SMTP-Server. Wähle Kontakte aus dem Adressbuch oder gib andere Adressen ein.", "Envía el recordatorio por correo con el servidor SMTP configurado en Home Assistant. Selecciona contactos de la agenda o escribe otras direcciones.", "Invia il promemoria via e-mail con il server SMTP configurato in Home Assistant. Seleziona contatti dalla rubrica o inserisci altri indirizzi.", "Stuurt de herinnering per e-mail via de SMTP-server die in Home Assistant is ingesteld. Kies contacten uit het adresboek of vul andere adressen in.", "Envia o lembrete por e-mail com o servidor SMTP configurado no Home Assistant. Seleciona contactos do livro de endereços ou escreve outros endereços.", "Wysyła przypomnienie e-mailem przez serwer SMTP skonfigurowany w Home Assistant. Wybierz kontakty z książki adresowej lub wpisz inne adresy."],
+    "Autres adresses e-mail (une par ligne)": ["Other e-mail addresses (one per line)", "Weitere E-Mail-Adressen (eine pro Zeile)", "Otras direcciones de correo (una por línea)", "Altri indirizzi e-mail (uno per riga)", "Andere e-mailadressen (één per regel)", "Outros endereços de e-mail (um por linha)", "Inne adresy e-mail (jeden w wierszu)"],
+    "Envoyer uniquement si nécessaire": ["Only send if needed", "Nur bei Bedarf senden", "Enviar solo si es necesario", "Invia solo se necessario", "Alleen verzenden indien nodig", "Enviar apenas se necessário", "Wysyłaj tylko w razie potrzeby"],
+    "Courses : uniquement s'il reste des articles. Menus : uniquement si des repas ne sont pas planifiés.": ["Shopping: only if items are left. Menus: only if some meals aren't planned.", "Einkauf: nur wenn noch Artikel übrig sind. Menüs: nur wenn Mahlzeiten nicht geplant sind.", "Compra: solo si quedan artículos. Menús: solo si hay comidas sin planificar.", "Spesa: solo se restano articoli. Menu: solo se ci sono pasti non pianificati.", "Boodschappen: alleen als er nog artikelen zijn. Menu's: alleen als er maaltijden niet gepland zijn.", "Compras: apenas se restarem artigos. Menus: apenas se houver refeições por planear.", "Zakupy: tylko jeśli zostały produkty. Menu: tylko jeśli są niezaplanowane posiłki."],
+    "Rappel actif": ["Reminder active", "Erinnerung aktiv", "Recordatorio activo", "Promemoria attivo", "Herinnering actief", "Lembrete ativo", "Przypomnienie aktywne"],
+    "🛒 Courses : vérifie les articles restant à acheter. Avec « Envoyer uniquement si nécessaire », aucun rappel n'est envoyé si la liste est terminée.": ["🛒 Shopping: checks the items left to buy. With \"Only send if needed\", no reminder is sent when the list is done.", "🛒 Einkauf: prüft die noch zu kaufenden Artikel. Mit „Nur bei Bedarf senden“ wird keine Erinnerung gesendet, wenn die Liste erledigt ist.", "🛒 Compra: comprueba los artículos pendientes. Con «Enviar solo si es necesario», no se envía nada si la lista está terminada.", "🛒 Spesa: controlla gli articoli ancora da comprare. Con «Invia solo se necessario», nessun promemoria se la lista è finita.", "🛒 Boodschappen: controleert wat er nog gekocht moet worden. Met \"Alleen verzenden indien nodig\" wordt niets verstuurd als de lijst af is.", "🛒 Compras: verifica os artigos por comprar. Com «Enviar apenas se necessário», nenhum lembrete é enviado se a lista estiver concluída.", "🛒 Zakupy: sprawdza produkty do kupienia. Z opcją „Wysyłaj tylko w razie potrzeby” nic nie zostanie wysłane, gdy lista jest gotowa."],
+    "📅 Menus : vérifie les repas non planifiés sur les sept prochains jours. Avec « Envoyer uniquement si nécessaire », aucun rappel n'est envoyé si tous les menus sont complets.": ["📅 Menus: checks unplanned meals over the next seven days. With \"Only send if needed\", no reminder is sent when all menus are complete.", "📅 Menüs: prüft ungeplante Mahlzeiten der nächsten sieben Tage. Mit „Nur bei Bedarf senden“ wird keine Erinnerung gesendet, wenn alle Menüs vollständig sind.", "📅 Menús: comprueba las comidas sin planificar en los próximos siete días. Con «Enviar solo si es necesario», no se envía nada si todos los menús están completos.", "📅 Menu: controlla i pasti non pianificati nei prossimi sette giorni. Con «Invia solo se necessario», nessun promemoria se tutti i menu sono completi.", "📅 Menu's: controleert niet-geplande maaltijden in de komende zeven dagen. Met \"Alleen verzenden indien nodig\" wordt niets verstuurd als alle menu's compleet zijn.", "📅 Menus: verifica as refeições por planear nos próximos sete dias. Com «Enviar apenas se necessário», nenhum lembrete é enviado se todos os menus estiverem completos.", "📅 Menu: sprawdza niezaplanowane posiłki na najbliższe siedem dni. Z opcją „Wysyłaj tylko w razie potrzeby” nic nie zostanie wysłane, gdy wszystkie menu są pełne."],
+    "🍳 Préparation : envoie la consigne saisie ci-dessous au moment choisi (par exemple « Décongeler le poulet »). Le délai n'est pas calculé automatiquement depuis la recette.": ["🍳 Prep: sends the instruction entered below at the chosen time (for example \"Defrost the chicken\"). The lead time isn't calculated from the recipe.", "🍳 Vorbereitung: sendet die unten eingegebene Anweisung zur gewählten Zeit (zum Beispiel „Hähnchen auftauen“). Die Vorlaufzeit wird nicht aus dem Rezept berechnet.", "🍳 Preparación: envía la indicación escrita abajo a la hora elegida (por ejemplo «Descongelar el pollo»). El plazo no se calcula a partir de la receta.", "🍳 Preparazione: invia l'istruzione inserita qui sotto all'ora scelta (ad esempio «Scongelare il pollo»). L'anticipo non è calcolato dalla ricetta.", "🍳 Voorbereiding: stuurt de instructie hieronder op het gekozen moment (bijvoorbeeld \"Kip ontdooien\"). De voorlooptijd wordt niet uit het recept berekend.", "🍳 Preparação: envia a instrução escrita abaixo à hora escolhida (por exemplo «Descongelar o frango»). O prazo não é calculado a partir da receita.", "🍳 Przygotowanie: wysyła wpisane poniżej polecenie o wybranej porze (np. „Rozmrozić kurczaka”). Czas nie jest liczony z przepisu."],
+    "🔔 Personnalisé : envoie le texte saisi ci-dessous à l'heure programmée (par exemple « Acheter les pommes de terre à la ferme »), indépendamment des courses et des menus.": ["🔔 Custom: sends the text entered below at the scheduled time (for example \"Buy potatoes at the farm\"), regardless of shopping and menus.", "🔔 Benutzerdefiniert: sendet den unten eingegebenen Text zur geplanten Zeit (zum Beispiel „Kartoffeln beim Hof kaufen“), unabhängig von Einkauf und Menüs.", "🔔 Personalizado: envía el texto escrito abajo a la hora programada (por ejemplo «Comprar patatas en la granja»), independientemente de la compra y los menús.", "🔔 Personalizzato: invia il testo inserito qui sotto all'ora programmata (ad esempio «Comprare le patate alla fattoria»), indipendentemente da spesa e menu.", "🔔 Aangepast: stuurt de tekst hieronder op het geplande tijdstip (bijvoorbeeld \"Aardappelen kopen bij de boerderij\"), los van boodschappen en menu's.", "🔔 Personalizado: envia o texto escrito abaixo à hora programada (por exemplo «Comprar batatas na quinta»), independentemente das compras e dos menus.", "🔔 Własne: wysyła wpisany poniżej tekst o zaplanowanej porze (np. „Kupić ziemniaki w gospodarstwie”), niezależnie od zakupów i menu."],
+    "Rappel enregistré": ["Reminder saved", "Erinnerung gespeichert", "Recordatorio guardado", "Promemoria salvato", "Herinnering opgeslagen", "Lembrete guardado", "Przypomnienie zapisane"],
+    "semaine du {d}": ["week of {d}", "Woche vom {d}", "semana del {d}", "settimana del {d}", "week van {d}", "semana de {d}", "tydzień od {d}"],
+    "le {d}": ["on {d}", "am {d}", "el {d}", "il {d}", "op {d}", "em {d}", "{d}"],
+    "du {a} au {b}": ["from {a} to {b}", "vom {a} bis {b}", "del {a} al {b}", "dal {a} al {b}", "van {a} tot {b}", "de {a} a {b}", "od {a} do {b}"],
+    "Générée pour la semaine du {d}": ["Generated for the week of {d}", "Erstellt für die Woche vom {d}", "Generada para la semana del {d}", "Generata per la settimana del {d}", "Aangemaakt voor de week van {d}", "Gerada para a semana de {d}", "Wygenerowana na tydzień od {d}"],
+    "Générée pour le {d}": ["Generated for {d}", "Erstellt für den {d}", "Generada para el {d}", "Generata per il {d}", "Aangemaakt voor {d}", "Gerada para {d}", "Wygenerowana na {d}"],
+    "Générée du {a} au {b}": ["Generated from {a} to {b}", "Erstellt vom {a} bis {b}", "Generada del {a} al {b}", "Generata dal {a} al {b}", "Aangemaakt van {a} tot {b}", "Gerada de {a} a {b}", "Wygenerowana od {a} do {b}"],
+    "Dates": ["Dates", "Daten", "Fechas", "Date", "Datums", "Datas", "Daty"],
+    "Du": ["From", "Vom", "Del", "Dal", "Van", "De", "Od"],
+    "au": ["to", "bis", "al", "al", "tot", "a", "do"],
+    "dates inversées": ["dates reversed", "Daten vertauscht", "fechas invertidas", "date invertite", "datums omgedraaid", "datas invertidas", "odwrócone daty"],
+    "{n} jour": ["{n} day", "{n} Tag", "{n} día", "{n} giorno", "{n} dag", "{n} dia", "{n} dzień"],
+    "{n} jours": ["{n} days", "{n} Tage", "{n} días", "{n} giorni", "{n} dagen", "{n} dias", "{n} dni"],
+    "Générer": ["Generate", "Erstellen", "Generar", "Genera", "Aanmaken", "Gerar", "Generuj"],
+    "Ajouter un article (Entrée)…": ["Add an item (Enter)…", "Artikel hinzufügen (Eingabe)…", "Añadir un artículo (Intro)…", "Aggiungi un articolo (Invio)…", "Artikel toevoegen (Enter)…", "Adicionar um artigo (Enter)…", "Dodaj produkt (Enter)…"],
+    "Rayons": ["Aisles", "Abteilungen", "Secciones", "Reparti", "Afdelingen", "Secções", "Działy"],
+    "Voir et restaurer les articles retirés": ["View and restore removed items", "Entfernte Artikel ansehen und wiederherstellen", "Ver y restaurar los artículos quitados", "Vedi e ripristina gli articoli rimossi", "Verwijderde artikelen bekijken en terugzetten", "Ver e restaurar os artigos retirados", "Pokaż i przywróć usunięte produkty"],
+    "Articles retirés": ["Removed items", "Entfernte Artikel", "Artículos quitados", "Articoli rimossi", "Verwijderde artikelen", "Artigos retirados", "Usunięte produkty"],
+    "{d}/{n} pris": ["{d}/{n} picked up", "{d}/{n} erledigt", "{d}/{n} cogidos", "{d}/{n} presi", "{d}/{n} gepakt", "{d}/{n} apanhados", "{d}/{n} w koszyku"],
+    "Retirer les articles pris": ["Remove picked-up items", "Erledigte Artikel entfernen", "Quitar los artículos cogidos", "Rimuovi gli articoli presi", "Gepakte artikelen verwijderen", "Retirar os artigos apanhados", "Usuń produkty z koszyka"],
+    "Envoyer (mail / Telegram)": ["Send (mail / Telegram)", "Senden (Mail / Telegram)", "Enviar (correo / Telegram)", "Invia (mail / Telegram)", "Versturen (mail / Telegram)", "Enviar (mail / Telegram)", "Wyślij (mail / Telegram)"],
+    "Copier": ["Copy", "Kopieren", "Copiar", "Copia", "Kopiëren", "Copiar", "Kopiuj"],
+    "Vider la liste": ["Empty the list", "Liste leeren", "Vaciar la lista", "Svuota la lista", "Lijst leegmaken", "Esvaziar a lista", "Wyczyść listę"],
+    "ajouté": ["added", "hinzugefügt", "añadido", "aggiunto", "toegevoegd", "adicionado", "dodano"],
+    "La liste est vide. Choisissez une semaine (ou des dates) et touchez <b>Générer</b> : les ingrédients des repas prévus sont additionnés et rangés par rayon.": ["The list is empty. Choose a week (or dates) and tap <b>Generate</b>: the ingredients of the planned meals are added up and sorted by aisle.", "Die Liste ist leer. Wählen Sie eine Woche (oder Daten) und tippen Sie auf <b>Erstellen</b>: Die Zutaten der geplanten Mahlzeiten werden addiert und nach Abteilung sortiert.", "La lista está vacía. Elige una semana (o fechas) y toca <b>Generar</b>: los ingredientes de las comidas previstas se suman y se ordenan por sección.", "La lista è vuota. Scegli una settimana (o delle date) e tocca <b>Genera</b>: gli ingredienti dei pasti previsti vengono sommati e ordinati per reparto.", "De lijst is leeg. Kies een week (of datums) en tik op <b>Aanmaken</b>: de ingrediënten van de geplande maaltijden worden opgeteld en per afdeling gesorteerd.", "A lista está vazia. Escolha uma semana (ou datas) e toque em <b>Gerar</b>: os ingredientes das refeições previstas são somados e arrumados por secção.", "Lista jest pusta. Wybierz tydzień (lub daty) i dotknij <b>Generuj</b>: składniki zaplanowanych posiłków zostaną zsumowane i posortowane według działów."],
+    "Ces articles ne seront pas ajoutés à nouveau lors de la génération de cette période. Les recettes restent inchangées.": ["These items won't be added again when this period is generated. Recipes stay unchanged.", "Diese Artikel werden beim Erstellen dieses Zeitraums nicht erneut hinzugefügt. Die Rezepte bleiben unverändert.", "Estos artículos no se volverán a añadir al generar este periodo. Las recetas no cambian.", "Questi articoli non saranno aggiunti di nuovo generando questo periodo. Le ricette restano invariate.", "Deze artikelen worden niet opnieuw toegevoegd bij het aanmaken van deze periode. De recepten blijven ongewijzigd.", "Estes artigos não serão adicionados novamente ao gerar este período. As receitas ficam inalteradas.", "Te produkty nie zostaną ponownie dodane przy generowaniu tego okresu. Przepisy pozostają bez zmian."],
+    "Restaurer": ["Restore", "Wiederherstellen", "Restaurar", "Ripristina", "Terugzetten", "Restaurar", "Przywróć"],
+    "Tout restaurer": ["Restore all", "Alle wiederherstellen", "Restaurar todo", "Ripristina tutto", "Alles terugzetten", "Restaurar tudo", "Przywróć wszystko"],
+    "Terminer": ["Done", "Fertig", "Terminar", "Fine", "Klaar", "Concluir", "Gotowe"],
+    "Les articles restaurés réapparaîtront à la prochaine génération de la liste.": ["Restored items will reappear the next time the list is generated.", "Wiederhergestellte Artikel erscheinen beim nächsten Erstellen der Liste wieder.", "Los artículos restaurados reaparecerán en la próxima generación de la lista.", "Gli articoli ripristinati riappariranno alla prossima generazione della lista.", "Teruggezette artikelen verschijnen weer bij het volgende aanmaken van de lijst.", "Os artigos restaurados reaparecerão na próxima geração da lista.", "Przywrócone produkty pojawią się przy następnym generowaniu listy."],
+    "Article réautorisé pour la prochaine génération": ["Item allowed again for the next generation", "Artikel für die nächste Erstellung wieder zugelassen", "Artículo permitido de nuevo para la próxima generación", "Articolo riammesso per la prossima generazione", "Artikel weer toegestaan bij het volgende aanmaken", "Artigo novamente permitido na próxima geração", "Produkt ponownie dozwolony przy następnym generowaniu"],
+    "Tous les articles sont réautorisés pour la prochaine génération": ["All items are allowed again for the next generation", "Alle Artikel sind für die nächste Erstellung wieder zugelassen", "Todos los artículos vuelven a estar permitidos para la próxima generación", "Tutti gli articoli sono riammessi per la prossima generazione", "Alle artikelen zijn weer toegestaan bij het volgende aanmaken", "Todos os artigos estão novamente permitidos na próxima geração", "Wszystkie produkty ponownie dozwolone przy następnym generowaniu"],
+    "Gérer les rayons": ["Manage aisles", "Abteilungen verwalten", "Gestionar las secciones", "Gestisci i reparti", "Afdelingen beheren", "Gerir as secções", "Zarządzaj działami"],
+    "Catégories personnalisées": ["Custom categories", "Eigene Kategorien", "Categorías personalizadas", "Categorie personalizzate", "Eigen categorieën", "Categorias personalizadas", "Własne kategorie"],
+    "Aucune catégorie personnalisée.": ["No custom categories.", "Keine eigenen Kategorien.", "Ninguna categoría personalizada.", "Nessuna categoria personalizzata.", "Geen eigen categorieën.", "Nenhuma categoria personalizada.", "Brak własnych kategorii."],
+    "Nouvelle catégorie": ["New category", "Neue Kategorie", "Nueva categoría", "Nuova categoria", "Nieuwe categorie", "Nova categoria", "Nowa kategoria"],
+    "Créer": ["Create", "Erstellen", "Crear", "Crea", "Aanmaken", "Criar", "Utwórz"],
+    "Les rayons standards restent disponibles. La suppression déplace les articles vers Divers.": ["Standard aisles remain available. Deleting moves the items to Other.", "Die Standardabteilungen bleiben verfügbar. Beim Löschen werden die Artikel nach Sonstiges verschoben.", "Las secciones estándar siguen disponibles. Al eliminar, los artículos pasan a Varios.", "I reparti standard restano disponibili. L'eliminazione sposta gli articoli in Varie.", "De standaardafdelingen blijven beschikbaar. Verwijderen verplaatst de artikelen naar Overig.", "As secções padrão continuam disponíveis. Eliminar move os artigos para Diversos.", "Standardowe działy pozostają dostępne. Usunięcie przenosi produkty do Różne."],
+    "Ex. Bricolage": ["e.g. DIY", "z. B. Heimwerken", "Ej. Bricolaje", "Es. Fai da te", "Bijv. Doe-het-zelf", "Ex. Bricolage", "Np. Majsterkowanie"],
+    "Indique un nom de rayon": ["Enter an aisle name", "Gib einen Abteilungsnamen ein", "Indica un nombre de sección", "Indica un nome di reparto", "Vul een afdelingsnaam in", "Indica um nome de secção", "Podaj nazwę działu"],
+    "Rayon créé": ["Aisle created", "Abteilung erstellt", "Sección creada", "Reparto creato", "Afdeling aangemaakt", "Secção criada", "Dział utworzony"],
+    "Nom du rayon": ["Aisle name", "Name der Abteilung", "Nombre de la sección", "Nome del reparto", "Naam van de afdeling", "Nome da secção", "Nazwa działu"],
+    "Pastille ou emoji": ["Badge or emoji", "Symbol oder Emoji", "Distintivo o emoji", "Pallino o emoji", "Badge of emoji", "Distintivo ou emoji", "Znaczek lub emoji"],
+    "Supprimer ce rayon ? Ses articles seront déplacés vers Divers.": ["Delete this aisle? Its items will be moved to Other.", "Diese Abteilung löschen? Ihre Artikel werden nach Sonstiges verschoben.", "¿Eliminar esta sección? Sus artículos pasarán a Varios.", "Eliminare questo reparto? I suoi articoli saranno spostati in Varie.", "Deze afdeling verwijderen? De artikelen gaan naar Overig.", "Eliminar esta secção? Os seus artigos serão movidos para Diversos.", "Usunąć ten dział? Jego produkty trafią do Różne."],
+    "Modifier un article": ["Edit an item", "Artikel bearbeiten", "Editar un artículo", "Modifica un articolo", "Artikel bewerken", "Editar um artigo", "Edytuj produkt"],
+    "Article": ["Item", "Artikel", "Artículo", "Articolo", "Artikel", "Artigo", "Produkt"],
+    "Quantité affichée": ["Displayed quantity", "Angezeigte Menge", "Cantidad mostrada", "Quantità mostrata", "Getoonde hoeveelheid", "Quantidade apresentada", "Wyświetlana ilość"],
+    "Quantités regroupées : modifier les quantités dans les recettes sources pour éviter de les compter plusieurs fois.": ["Grouped quantities: edit the quantities in the source recipes to avoid counting them several times.", "Zusammengefasste Mengen: Ändern Sie die Mengen in den Quellrezepten, um sie nicht mehrfach zu zählen.", "Cantidades agrupadas: modifica las cantidades en las recetas de origen para no contarlas varias veces.", "Quantità raggruppate: modifica le quantità nelle ricette di origine per non contarle più volte.", "Samengevoegde hoeveelheden: wijzig de hoeveelheden in de bronrecepten om dubbel tellen te voorkomen.", "Quantidades agrupadas: altere as quantidades nas receitas de origem para não as contar várias vezes.", "Zgrupowane ilości: zmień ilości w przepisach źródłowych, by nie liczyć ich kilka razy."],
+    "Rayon": ["Aisle", "Abteilung", "Sección", "Reparto", "Afdeling", "Secção", "Dział"],
+    "+ Nouveau rayon": ["+ New aisle", "+ Neue Abteilung", "+ Nueva sección", "+ Nuovo reparto", "+ Nieuwe afdeling", "+ Nova secção", "+ Nowy dział"],
+    "Les modifications ne changent pas les recettes d'origine.": ["Changes don't alter the original recipes.", "Änderungen wirken sich nicht auf die Originalrezepte aus.", "Los cambios no modifican las recetas originales.", "Le modifiche non cambiano le ricette originali.", "Wijzigingen veranderen de oorspronkelijke recepten niet.", "As alterações não mudam as receitas originais.", "Zmiany nie wpływają na oryginalne przepisy."],
+    "Nom requis": ["Name required", "Name erforderlich", "Nombre obligatorio", "Nome obbligatorio", "Naam verplicht", "Nome obrigatório", "Nazwa wymagana"],
+    "Liste de courses": ["Shopping list", "Einkaufsliste", "Lista de la compra", "Lista della spesa", "Boodschappenlijst", "Lista de compras", "Lista zakupów"],
+    "(liste vide)": ["(empty list)", "(leere Liste)", "(lista vacía)", "(lista vuota)", "(lege lijst)", "(lista vazia)", "(pusta lista)"],
+    "Envoyer la liste de courses": ["Send the shopping list", "Einkaufsliste senden", "Enviar la lista de la compra", "Invia la lista della spesa", "Boodschappenlijst versturen", "Enviar a lista de compras", "Wyślij listę zakupów"],
+    "Par e-mail": ["By e-mail", "Per E-Mail", "Por correo", "Via e-mail", "Per e-mail", "Por e-mail", "E-mailem"],
+    "Retirer du carnet": ["Remove from address book", "Aus dem Adressbuch entfernen", "Quitar de la agenda", "Rimuovi dalla rubrica", "Uit adresboek verwijderen", "Remover do livro de endereços", "Usuń z książki adresowej"],
+    "Votre carnet d'adresses est vide : ajoutez les personnes à qui envoyer la liste.": ["Your address book is empty: add the people to send the list to.", "Ihr Adressbuch ist leer: Fügen Sie die Personen hinzu, an die die Liste gehen soll.", "Tu agenda está vacía: añade las personas a las que enviar la lista.", "La tua rubrica è vuota: aggiungi le persone a cui inviare la lista.", "Uw adresboek is leeg: voeg de mensen toe naar wie de lijst moet.", "O seu livro de endereços está vazio: adicione as pessoas a quem enviar a lista.", "Książka adresowa jest pusta: dodaj osoby, którym chcesz wysłać listę."],
+    "Nom (Marie, Paul…)": ["Name (Mary, Paul…)", "Name (Marie, Paul…)", "Nombre (María, Pablo…)", "Nome (Maria, Paolo…)", "Naam (Marie, Paul…)", "Nome (Maria, Paulo…)", "Imię (Maria, Paweł…)"],
+    "adresse e-mail": ["e-mail address", "E-Mail-Adresse", "dirección de correo", "indirizzo e-mail", "e-mailadres", "endereço de e-mail", "adres e-mail"],
+    "Aucune intégration SMTP n'est configurée dans Home Assistant : utilisez « Ouvrir ma messagerie », ou ajoutez l'intégration SMTP pour envoyer directement.": ["No SMTP integration is set up in Home Assistant: use \"Open my mail app\", or add the SMTP integration to send directly.", "In Home Assistant ist keine SMTP-Integration eingerichtet: Verwenden Sie „Mein E-Mail-Programm öffnen“ oder fügen Sie die SMTP-Integration hinzu, um direkt zu senden.", "No hay ninguna integración SMTP configurada en Home Assistant: usa «Abrir mi correo» o añade la integración SMTP para enviar directamente.", "Nessuna integrazione SMTP configurata in Home Assistant: usa «Apri la mia posta» o aggiungi l'integrazione SMTP per inviare direttamente.", "Er is geen SMTP-integratie ingesteld in Home Assistant: gebruik \"Mijn mailprogramma openen\" of voeg de SMTP-integratie toe om direct te versturen.", "Nenhuma integração SMTP configurada no Home Assistant: use «Abrir o meu e-mail» ou adicione a integração SMTP para enviar diretamente.", "W Home Assistant nie skonfigurowano integracji SMTP: użyj „Otwórz moją pocztę” lub dodaj integrację SMTP, by wysyłać bezpośrednio."],
+    "Envoyé par {s} (intégration {i}), en un seul message à toutes les adresses cochées.": ["Sent by {s} ({i} integration), in a single message to all ticked addresses.", "Gesendet von {s} (Integration {i}), in einer einzigen Nachricht an alle angekreuzten Adressen.", "Enviado por {s} (integración {i}), en un solo mensaje a todas las direcciones marcadas.", "Inviato da {s} (integrazione {i}), in un unico messaggio a tutti gli indirizzi selezionati.", "Verzonden door {s} (integratie {i}), in één bericht naar alle aangevinkte adressen.", "Enviado por {s} (integração {i}), numa só mensagem para todos os endereços marcados.", "Wysyłane przez {s} (integracja {i}) jedną wiadomością do wszystkich zaznaczonych adresów."],
+    "Sur un téléphone ou une tablette (notification)": ["On a phone or tablet (notification)", "Auf ein Telefon oder Tablet (Benachrichtigung)", "En un teléfono o tableta (notificación)", "Su un telefono o tablet (notifica)", "Op een telefoon of tablet (melding)", "Num telemóvel ou tablet (notificação)", "Na telefon lub tablet (powiadomienie)"],
+    "Par Telegram (liste interactive synchronisée)": ["By Telegram (synced interactive list)", "Per Telegram (synchronisierte interaktive Liste)", "Por Telegram (lista interactiva sincronizada)", "Via Telegram (lista interattiva sincronizzata)", "Via Telegram (gesynchroniseerde interactieve lijst)", "Por Telegram (lista interativa sincronizada)", "Przez Telegram (zsynchronizowana lista interaktywna)"],
+    "Tout sélectionner / désélectionner": ["Select / deselect all", "Alle aus- / abwählen", "Seleccionar / deseleccionar todo", "Seleziona / deseleziona tutto", "Alles (de)selecteren", "Selecionar / desmarcar tudo", "Zaznacz / odznacz wszystko"],
+    "Sélectionne les conversations destinataires. Le numéro du sujet est facultatif.": ["Pick the target chats. The topic number is optional.", "Wähle die Ziel-Chats. Die Themennummer ist optional.", "Selecciona las conversaciones destinatarias. El número de tema es opcional.", "Seleziona le conversazioni di destinazione. Il numero dell'argomento è facoltativo.", "Kies de doelchats. Het onderwerpnummer is optioneel.", "Seleciona as conversas de destino. O número do tópico é opcional.", "Wybierz czaty docelowe. Numer wątku jest opcjonalny."],
+    "Chat ID (ex. -1001234567890)": ["Chat ID (e.g. -1001234567890)", "Chat-ID (z. B. -1001234567890)", "Chat ID (ej. -1001234567890)", "Chat ID (es. -1001234567890)", "Chat-ID (bijv. -1001234567890)", "Chat ID (ex. -1001234567890)", "Chat ID (np. -1001234567890)"],
+    "Sujet / thread ID (facultatif)": ["Topic / thread ID (optional)", "Thema / Thread-ID (optional)", "Tema / thread ID (opcional)", "Argomento / thread ID (facoltativo)", "Onderwerp / thread-ID (optioneel)", "Tópico / thread ID (opcional)", "Wątek / thread ID (opcjonalnie)"],
+    "Conversation Telegram": ["Telegram chat", "Telegram-Chat", "Conversación de Telegram", "Conversazione Telegram", "Telegram-chat", "Conversa Telegram", "Czat Telegram"],
+    "Sujet :": ["Topic:", "Thema:", "Tema:", "Argomento:", "Onderwerp:", "Tópico:", "Wątek:"],
+    "Sans sujet": ["No topic", "Ohne Thema", "Sin tema", "Senza argomento", "Zonder onderwerp", "Sem tópico", "Bez wątku"],
+    "Retirer cette conversation": ["Remove this chat", "Diesen Chat entfernen", "Quitar esta conversación", "Rimuovi questa conversazione", "Deze chat verwijderen", "Remover esta conversa", "Usuń ten czat"],
+    "Ouvrir ma messagerie": ["Open my mail app", "Mein E-Mail-Programm öffnen", "Abrir mi correo", "Apri la mia posta", "Mijn mailprogramma openen", "Abrir o meu e-mail", "Otwórz moją pocztę"],
+    "Envoyer": ["Send", "Senden", "Enviar", "Invia", "Versturen", "Enviar", "Wyślij"],
+    "Aperçu de la liste": ["List preview", "Vorschau der Liste", "Vista previa de la lista", "Anteprima della lista", "Voorbeeld van de lijst", "Pré-visualização da lista", "Podgląd listy"],
+    "Identifiant Telegram invalide": ["Invalid Telegram ID", "Ungültige Telegram-ID", "Identificador de Telegram no válido", "Identificativo Telegram non valido", "Ongeldige Telegram-ID", "Identificador Telegram inválido", "Nieprawidłowy identyfikator Telegram"],
+    "Retirer {n} du carnet d'adresses ?": ["Remove {n} from the address book?", "{n} aus dem Adressbuch entfernen?", "¿Quitar a {n} de la agenda?", "Rimuovere {n} dalla rubrica?", "{n} uit het adresboek verwijderen?", "Remover {n} do livro de endereços?", "Usunąć {n} z książki adresowej?"],
+    "Indiquez une adresse e-mail": ["Enter an e-mail address", "E-Mail-Adresse angeben", "Indique una dirección de correo", "Indica un indirizzo e-mail", "Vul een e-mailadres in", "Indique um endereço de e-mail", "Podaj adres e-mail"],
+    "{n} ajouté au carnet": ["{n} added to the address book", "{n} zum Adressbuch hinzugefügt", "{n} añadido a la agenda", "{n} aggiunto alla rubrica", "{n} toegevoegd aan het adresboek", "{n} adicionado ao livro de endereços", "Dodano {n} do książki adresowej"],
+    "Envoi…": ["Sending…", "Senden…", "Enviando…", "Invio…", "Versturen…", "A enviar…", "Wysyłanie…"],
+    "Liste envoyée": ["List sent", "Liste gesendet", "Lista enviada", "Lista inviata", "Lijst verzonden", "Lista enviada", "Lista wysłana"],
+    "à {n} adresse": ["to {n} address", "an {n} Adresse", "a {n} dirección", "a {n} indirizzo", "naar {n} adres", "para {n} endereço", "na {n} adres"],
+    "à {n} adresses": ["to {n} addresses", "an {n} Adressen", "a {n} direcciones", "a {n} indirizzi", "naar {n} adressen", "para {n} endereços", "na {n} adresów"],
+    "et": ["and", "und", "y", "e", "en", "e", "i"],
+    "à {n} appareil": ["to {n} device", "an {n} Gerät", "a {n} dispositivo", "a {n} dispositivo", "naar {n} apparaat", "para {n} dispositivo", "na {n} urządzenie"],
+    "à {n} appareils": ["to {n} devices", "an {n} Geräte", "a {n} dispositivos", "a {n} dispositivi", "naar {n} apparaten", "para {n} dispositivos", "na {n} urządzeń"],
+    "Envoi impossible": ["Sending failed", "Senden fehlgeschlagen", "No se pudo enviar", "Invio non riuscito", "Verzenden mislukt", "Envio impossível", "Wysyłanie nieudane"],
+    "Notes": ["Notes", "Notizen", "Notas", "Note", "Notities", "Notas", "Notatki"],
+    "note": ["note", "Notiz", "nota", "nota", "notitie", "nota", "notatka"],
+    "Rien de prévu pour ce repas.": ["Nothing planned for this meal.", "Für diese Mahlzeit ist nichts geplant.", "Nada previsto para esta comida.", "Niente in programma per questo pasto.", "Niets gepland voor deze maaltijd.", "Nada previsto para esta refeição.", "Nic nie zaplanowano na ten posiłek."],
+    "Vous pouvez ajouter plusieurs recettes et plusieurs ingrédients à ce repas.": ["You can add several recipes and ingredients to this meal.", "Sie können dieser Mahlzeit mehrere Rezepte und Zutaten hinzufügen.", "Puedes añadir varias recetas e ingredientes a esta comida.", "Puoi aggiungere più ricette e più ingredienti a questo pasto.", "U kunt meerdere recepten en ingrediënten aan deze maaltijd toevoegen.", "Pode adicionar várias receitas e ingredientes a esta refeição.", "Do tego posiłku możesz dodać kilka przepisów i składników."],
+    "Ajouter : recette, ingrédient ou texte libre…": ["Add: recipe, ingredient or free text…", "Hinzufügen: Rezept, Zutat oder freier Text…", "Añadir: receta, ingrediente o texto libre…", "Aggiungi: ricetta, ingrediente o testo libero…", "Toevoegen: recept, ingrediënt of vrije tekst…", "Adicionar: receita, ingrediente ou texto livre…", "Dodaj: przepis, składnik lub dowolny tekst…"],
+    "Déplacer vers": ["Move to", "Verschieben nach", "Mover a", "Sposta a", "Verplaatsen naar", "Mover para", "Przenieś do"],
+    "copier": ["copy", "kopieren", "copiar", "copia", "kopiëren", "copiar", "kopiuj"],
+    "Déjà dans ce repas": ["Already in this meal", "Bereits in dieser Mahlzeit", "Ya está en esta comida", "Già in questo pasto", "Al in deze maaltijd", "Já está nesta refeição", "Już w tym posiłku"],
+    "Mes recettes": ["My recipes", "Meine Rezepte", "Mis recetas", "Le mie ricette", "Mijn recepten", "As minhas receitas", "Moje przepisy"],
+    "Autres choix": ["Other options", "Weitere Möglichkeiten", "Otras opciones", "Altre scelte", "Andere opties", "Outras opções", "Inne opcje"],
+    "Chercher « {q} » sur {s}": ["Search \"{q}\" on {s}", "„{q}“ auf {s} suchen", "Buscar «{q}» en {s}", "Cerca «{q}» su {s}", "\"{q}\" zoeken op {s}", "Procurar «{q}» no {s}", "Szukaj „{q}” w {s}"],
+    "Ajouter « {q} » comme ingrédient": ["Add \"{q}\" as an ingredient", "„{q}“ als Zutat hinzufügen", "Añadir «{q}» como ingrediente", "Aggiungi «{q}» come ingrediente", "\"{q}\" als ingrediënt toevoegen", "Adicionar «{q}» como ingrediente", "Dodaj „{q}” jako składnik"],
+    "Ajouter « {q} » comme note": ["Add \"{q}\" as a note", "„{q}“ als Notiz hinzufügen", "Añadir «{q}» como nota", "Aggiungi «{q}» come nota", "\"{q}\" als notitie toevoegen", "Adicionar «{q}» como nota", "Dodaj „{q}” jako notatkę"],
+    "Recherche…": ["Searching…", "Suche…", "Buscando…", "Ricerca…", "Zoeken…", "A pesquisar…", "Wyszukiwanie…"],
+    "Aucun produit.": ["No products.", "Keine Produkte.", "Ningún producto.", "Nessun prodotto.", "Geen producten.", "Nenhum produto.", "Brak produktów."],
+    "« {n} » ajouté à vos ingrédients": ["\"{n}\" added to your ingredients", "„{n}“ zu Ihren Zutaten hinzugefügt", "«{n}» añadido a tus ingredientes", "«{n}» aggiunto ai tuoi ingredienti", "\"{n}\" toegevoegd aan uw ingrediënten", "«{n}» adicionado aos seus ingredientes", "Dodano „{n}” do składników"],
+    "Photo illisible": ["Unreadable photo", "Foto nicht lesbar", "Foto ilegible", "Foto illeggibile", "Foto onleesbaar", "Foto ilegível", "Nieczytelne zdjęcie"],
+    "Ouverture de l'appareil photo…": ["Opening the camera…", "Kamera wird geöffnet…", "Abriendo la cámara…", "Apertura della fotocamera…", "Camera openen…", "A abrir a câmara…", "Otwieranie aparatu…"],
+    "Prendre la photo": ["Take the photo", "Foto aufnehmen", "Hacer la foto", "Scatta la foto", "Foto maken", "Tirar a foto", "Zrób zdjęcie"],
+    "Changer de caméra": ["Switch camera", "Kamera wechseln", "Cambiar de cámara", "Cambia fotocamera", "Andere camera", "Mudar de câmara", "Zmień aparat"],
+    "Choisir une photo": ["Choose a photo", "Foto wählen", "Elegir una foto", "Scegli una foto", "Foto kiezen", "Escolher uma foto", "Wybierz zdjęcie"],
+    "Prendre une photo": ["Take a photo", "Foto aufnehmen", "Hacer una foto", "Scatta una foto", "Foto maken", "Tirar uma foto", "Zrób zdjęcie"],
+    "Recherche sur {s}…": ["Searching {s}…", "Suche auf {s}…", "Buscando en {s}…", "Ricerca su {s}…", "Zoeken op {s}…", "A pesquisar no {s}…", "Wyszukiwanie w {s}…"],
+    "Aucune recette trouvée sur {s}.": ["No recipe found on {s}.", "Kein Rezept auf {s} gefunden.", "No se encontró ninguna receta en {s}.", "Nessuna ricetta trovata su {s}.", "Geen recept gevonden op {s}.", "Nenhuma receita encontrada no {s}.", "Nie znaleziono przepisów w {s}."],
+    "{n} résultats": ["{n} results", "{n} Ergebnisse", "{n} resultados", "{n} risultati", "{n} resultaten", "{n} resultados", "{n} wyników"],
+    "{n} résultat": ["{n} result", "{n} Ergebnis", "{n} resultado", "{n} risultato", "{n} resultaat", "{n} resultado", "{n} wynik"],
+    "déjà importée": ["already imported", "bereits importiert", "ya importada", "già importata", "al geïmporteerd", "já importada", "już zaimportowany"],
+    "« {n} » importée": ["\"{n}\" imported", "„{n}“ importiert", "«{n}» importada", "«{n}» importata", "\"{n}\" geïmporteerd", "«{n}» importada", "Zaimportowano „{n}”"],
+    "Import impossible": ["Import failed", "Import fehlgeschlagen", "No se pudo importar", "Importazione non riuscita", "Importeren mislukt", "Importação impossível", "Import nieudany"],
+    "Copie créée : « {n} (revisitée) »": ["Copy created: \"{n} (revisited)\"", "Kopie erstellt: „{n} (abgewandelt)“", "Copia creada: «{n} (versionada)»", "Copia creata: «{n} (rivisitata)»", "Kopie gemaakt: \"{n} (bewerkt)\"", "Cópia criada: «{n} (revisitada)»", "Utworzono kopię: „{n} (zmodyfikowany)”"],
+    "Recette introuvable": ["Recipe not found", "Rezept nicht gefunden", "Receta no encontrada", "Ricetta non trovata", "Recept niet gevonden", "Receita não encontrada", "Nie znaleziono przepisu"],
+    "Prépa": ["Prep", "Vorb.", "Prep.", "Prep.", "Voorb.", "Prep.", "Przyg."],
+    "Cuisson": ["Cooking", "Garzeit", "Cocción", "Cottura", "Bereiding", "Cozedura", "Gotowanie"],
+    "Ouvrir dans Mealie": ["Open in Mealie", "In Mealie öffnen", "Abrir en Mealie", "Apri in Mealie", "Openen in Mealie", "Abrir no Mealie", "Otwórz w Mealie"],
+    "Envoyer vers Mealie": ["Send to Mealie", "An Mealie senden", "Enviar a Mealie", "Invia a Mealie", "Naar Mealie sturen", "Enviar para o Mealie", "Wyślij do Mealie"],
+    "Voir la recette d'origine": ["See the original recipe", "Originalrezept ansehen", "Ver la receta original", "Vedi la ricetta originale", "Origineel recept bekijken", "Ver a receita original", "Zobacz oryginalny przepis"],
+    "Planifier": ["Plan", "Planen", "Planificar", "Pianifica", "Plannen", "Planear", "Zaplanuj"],
+    "Favori": ["Favourite", "Favorit", "Favorito", "Preferito", "Favoriet", "Favorito", "Ulubiony"],
+    "Ajouter aux favoris": ["Add to favourites", "Zu Favoriten hinzufügen", "Añadir a favoritos", "Aggiungi ai preferiti", "Aan favorieten toevoegen", "Adicionar aos favoritos", "Dodaj do ulubionych"],
+    "Dupliquer": ["Duplicate", "Duplizieren", "Duplicar", "Duplica", "Dupliceren", "Duplicar", "Duplikuj"],
+    "Créer une copie à modifier, l'original reste intact": ["Create a copy to edit, the original stays untouched", "Eine bearbeitbare Kopie erstellen, das Original bleibt unverändert", "Crear una copia para modificar; el original queda intacto", "Crea una copia da modificare, l'originale resta intatto", "Een kopie maken om te bewerken, het origineel blijft intact", "Criar uma cópia para editar; o original fica intacto", "Utwórz kopię do edycji, oryginał pozostaje bez zmian"],
+    "Source": ["Source", "Quelle", "Fuente", "Fonte", "Bron", "Fonte", "Źródło"],
+    "Inspirée de": ["Inspired by", "Inspiriert von", "Inspirada en", "Ispirata a", "Geïnspireerd op", "Inspirada em", "Na podstawie"],
+    "Préparation": ["Method", "Zubereitung", "Preparación", "Preparazione", "Bereiding", "Preparação", "Przygotowanie"],
+    "Aucune étape.": ["No steps.", "Keine Schritte.", "Ningún paso.", "Nessun passaggio.", "Geen stappen.", "Nenhum passo.", "Brak kroków."],
+    "Supprimer « {n} » ?": ["Delete \"{n}\"?", "„{n}“ löschen?", "¿Eliminar «{n}»?", "Eliminare «{n}»?", "\"{n}\" verwijderen?", "Eliminar «{n}»?", "Usunąć „{n}”?"],
+    "« {n} » envoyée vers Mealie": ["\"{n}\" sent to Mealie", "„{n}“ an Mealie gesendet", "«{n}» enviada a Mealie", "«{n}» inviata a Mealie", "\"{n}\" naar Mealie gestuurd", "«{n}» enviada para o Mealie", "Wysłano „{n}” do Mealie"],
+    "« {n} » est déjà dans Mealie": ["\"{n}\" is already in Mealie", "„{n}“ ist bereits in Mealie", "«{n}» ya está en Mealie", "«{n}» è già in Mealie", "\"{n}\" staat al in Mealie", "«{n}» já está no Mealie", "„{n}” jest już w Mealie"],
+    "Planifier « {n} »": ["Plan \"{n}\"", "„{n}“ planen", "Planificar «{n}»", "Pianifica «{n}»", "\"{n}\" plannen", "Planear «{n}»", "Zaplanuj „{n}”"],
+    "{n} personnes · choisissez un repas": ["{n} servings · choose a meal", "{n} Personen · Mahlzeit wählen", "{n} personas · elige una comida", "{n} persone · scegli un pasto", "{n} personen · kies een maaltijd", "{n} pessoas · escolha uma refeição", "{n} os. · wybierz posiłek"],
+    "Ajoutée au {s} du {d}": ["Added to {s} on {d}", "Zum {s} am {d} hinzugefügt", "Añadida a la {s} del {d}", "Aggiunta al {s} di {d}", "Toegevoegd aan {s} op {d}", "Adicionada ao {s} de {d}", "Dodano do: {s}, {d}"],
+    "Nouvelle recette": ["New recipe", "Neues Rezept", "Nueva receta", "Nuova ricetta", "Nieuw recept", "Nova receita", "Nowy przepis"],
+    "Modifier « {n} »": ["Edit \"{n}\"", "„{n}“ bearbeiten", "Editar «{n}»", "Modifica «{n}»", "\"{n}\" bewerken", "Editar «{n}»", "Edytuj „{n}”"],
+    "Personnes": ["Servings", "Personen", "Personas", "Persone", "Personen", "Pessoas", "Porcje"],
+    "Préparation (min)": ["Prep (min)", "Vorbereitung (Min.)", "Preparación (min)", "Preparazione (min)", "Voorbereiding (min)", "Preparação (min)", "Przygotowanie (min)"],
+    "Cuisson (min)": ["Cooking (min)", "Garzeit (Min.)", "Cocción (min)", "Cottura (min)", "Bereiding (min)", "Cozedura (min)", "Gotowanie (min)"],
+    "Catégorie": ["Category", "Kategorie", "Categoría", "Categoria", "Categorie", "Categoria", "Kategoria"],
+    "Plat principal, dessert…": ["Main course, dessert…", "Hauptgericht, Dessert…", "Plato principal, postre…", "Piatto principale, dessert…", "Hoofdgerecht, dessert…", "Prato principal, sobremesa…", "Danie główne, deser…"],
+    "Photo": ["Photo", "Foto", "Foto", "Foto", "Foto", "Foto", "Zdjęcie"],
+    "Ou une adresse d'image sur Internet": ["Or an image address on the web", "Oder eine Bildadresse im Internet", "O una dirección de imagen en Internet", "Oppure un indirizzo di immagine su Internet", "Of een afbeeldingsadres op internet", "Ou um endereço de imagem na Internet", "Lub adres obrazu w internecie"],
+    "Ingrédients — un par ligne (ex. « 200 g de farine »)": ["Ingredients — one per line (e.g. \"200 g flour\")", "Zutaten — eine pro Zeile (z. B. „200 g Mehl“)", "Ingredientes — uno por línea (ej. «200 g de harina»)", "Ingredienti — uno per riga (es. «200 g di farina»)", "Ingrediënten — één per regel (bijv. \"200 g bloem\")", "Ingredientes — um por linha (ex. «200 g de farinha»)", "Składniki — jeden w wierszu (np. „200 g mąki”)"],
+    "Étapes — une par ligne": ["Steps — one per line", "Schritte — einer pro Zeile", "Pasos — uno por línea", "Passaggi — uno per riga", "Stappen — één per regel", "Passos — um por linha", "Kroki — jeden w wierszu"],
+    "Texte non classé ({n} lignes) — à vérifier": ["Unsorted text ({n} lines) — to check", "Nicht zugeordneter Text ({n} Zeilen) — bitte prüfen", "Texto sin clasificar ({n} líneas) — a revisar", "Testo non classificato ({n} righe) — da verificare", "Niet ingedeelde tekst ({n} regels) — controleren", "Texto não classificado ({n} linhas) — a verificar", "Niesklasyfikowany tekst ({n} wierszy) — do sprawdzenia"],
+    "Donnez un nom à la recette": ["Give the recipe a name", "Geben Sie dem Rezept einen Namen", "Pon un nombre a la receta", "Dai un nome alla ricetta", "Geef het recept een naam", "Dê um nome à receita", "Nadaj przepisowi nazwę"],
+    "Recette enregistrée": ["Recipe saved", "Rezept gespeichert", "Receta guardada", "Ricetta salvata", "Recept opgeslagen", "Receita guardada", "Przepis zapisany"],
+    "Recette et photo enregistrées": ["Recipe and photo saved", "Rezept und Foto gespeichert", "Receta y foto guardadas", "Ricetta e foto salvate", "Recept en foto opgeslagen", "Receita e foto guardadas", "Przepis i zdjęcie zapisane"],
+    "Ajouter une recette": ["Add a recipe", "Rezept hinzufügen", "Añadir una receta", "Aggiungi una ricetta", "Recept toevoegen", "Adicionar uma receita", "Dodaj przepis"],
+    "Recherche": ["Search", "Suche", "Búsqueda", "Ricerca", "Zoeken", "Pesquisa", "Szukaj"],
+    "Chercher": ["Search", "Suchen", "Buscar", "Cerca", "Zoeken", "Procurar", "Szukaj"],
+    "Ex. lasagnes, gratin dauphinois, tarte aux pommes…": ["e.g. lasagne, potato gratin, apple pie…", "z. B. Lasagne, Kartoffelgratin, Apfelkuchen…", "Ej. lasaña, gratén de patatas, tarta de manzana…", "Es. lasagne, gratin di patate, torta di mele…", "Bijv. lasagne, aardappelgratin, appeltaart…", "Ex. lasanha, gratinado de batata, tarte de maçã…", "Np. lasagne, zapiekanka ziemniaczana, szarlotka…"],
+    "Collez l'adresse d'une recette : Marmiton, 750g, CuisineAZ, Journal des Femmes… (tout site qui décrit ses recettes au format standard).": ["Paste a recipe address: Marmiton, 750g, CuisineAZ, Journal des Femmes… (any site that describes its recipes in the standard format).", "Fügen Sie die Adresse eines Rezepts ein: Marmiton, 750g, CuisineAZ, Journal des Femmes… (jede Website, die ihre Rezepte im Standardformat beschreibt).", "Pega la dirección de una receta: Marmiton, 750g, CuisineAZ, Journal des Femmes… (cualquier web que describa sus recetas en el formato estándar).", "Incolla l'indirizzo di una ricetta: Marmiton, 750g, CuisineAZ, Journal des Femmes… (qualsiasi sito che descrive le ricette nel formato standard).", "Plak het adres van een recept: Marmiton, 750g, CuisineAZ, Journal des Femmes… (elke site die recepten in het standaardformaat beschrijft).", "Cole o endereço de uma receita: Marmiton, 750g, CuisineAZ, Journal des Femmes… (qualquer site que descreva as receitas no formato padrão).", "Wklej adres przepisu: Marmiton, 750g, CuisineAZ, Journal des Femmes… (każda strona opisująca przepisy w standardowym formacie)."],
+    "Importer": ["Import", "Importieren", "Importar", "Importa", "Importeren", "Importar", "Importuj"],
+    "Adresse invalide": ["Invalid address", "Ungültige Adresse", "Dirección no válida", "Indirizzo non valido", "Ongeldig adres", "Endereço inválido", "Nieprawidłowy adres"],
+    "Import…": ["Importing…", "Import…", "Importando…", "Importazione…", "Importeren…", "A importar…", "Importowanie…"],
+    "Cette recette est déjà dans votre base": ["This recipe is already in your database", "Dieses Rezept ist bereits in Ihrer Datenbank", "Esta receta ya está en tu base", "Questa ricetta è già nel tuo database", "Dit recept staat al in uw database", "Esta receita já está na sua base", "Ten przepis jest już w bazie"],
+    "Choisissez un fichier PDF (8 Mo maximum). L'extraction peut ne pas fonctionner avec les PDF scannés ou constitués uniquement d'images. Le fichier n'est pas conservé.": ["Choose a PDF file (8 MB maximum). Extraction may not work with scanned or image-only PDFs. The file isn't kept.", "Wählen Sie eine PDF-Datei (höchstens 8 MB). Bei gescannten oder reinen Bild-PDFs funktioniert die Extraktion eventuell nicht. Die Datei wird nicht gespeichert.", "Elige un archivo PDF (8 MB como máximo). La extracción puede no funcionar con PDF escaneados o solo de imágenes. El archivo no se conserva.", "Scegli un file PDF (massimo 8 MB). L'estrazione potrebbe non funzionare con PDF scansionati o di sole immagini. Il file non viene conservato.", "Kies een PDF-bestand (maximaal 8 MB). Extractie werkt mogelijk niet bij gescande of alleen-beeld-PDF's. Het bestand wordt niet bewaard.", "Escolha um ficheiro PDF (máximo 8 MB). A extração pode não funcionar com PDF digitalizados ou só de imagens. O ficheiro não é guardado.", "Wybierz plik PDF (maks. 8 MB). Wyodrębnianie może nie działać z zeskanowanymi PDF lub złożonymi z samych obrazów. Plik nie jest przechowywany."],
+    "Fichier depuis cet appareil": ["File from this device", "Datei von diesem Gerät", "Archivo de este dispositivo", "File da questo dispositivo", "Bestand van dit apparaat", "Ficheiro deste dispositivo", "Plik z tego urządzenia"],
+    "Analyser le fichier": ["Analyse the file", "Datei analysieren", "Analizar el archivo", "Analizza il file", "Bestand analyseren", "Analisar o ficheiro", "Analizuj plik"],
+    "Sélectionnez un PDF": ["Select a PDF", "Wählen Sie ein PDF", "Selecciona un PDF", "Seleziona un PDF", "Kies een PDF", "Selecione um PDF", "Wybierz PDF"],
+    "Seuls les fichiers PDF sont acceptés": ["Only PDF files are accepted", "Nur PDF-Dateien werden akzeptiert", "Solo se aceptan archivos PDF", "Sono accettati solo file PDF", "Alleen PDF-bestanden worden geaccepteerd", "Só são aceites ficheiros PDF", "Akceptowane są tylko pliki PDF"],
+    "Fichier supérieur à 8 Mo": ["File larger than 8 MB", "Datei größer als 8 MB", "Archivo de más de 8 MB", "File superiore a 8 MB", "Bestand groter dan 8 MB", "Ficheiro maior do que 8 MB", "Plik większy niż 8 MB"],
+    "Le fichier est vide": ["The file is empty", "Die Datei ist leer", "El archivo está vacío", "Il file è vuoto", "Het bestand is leeg", "O ficheiro está vazio", "Plik jest pusty"],
+    "Lecture du fichier impossible": ["Can't read the file", "Datei kann nicht gelesen werden", "No se puede leer el archivo", "Impossibile leggere il file", "Bestand kan niet worden gelezen", "Não é possível ler o ficheiro", "Nie można odczytać pliku"],
+    "Transfert": ["Upload", "Übertragung", "Transferencia", "Trasferimento", "Overdracht", "Transferência", "Przesyłanie"],
+    "Analyse du document en cours…": ["Analysing the document…", "Dokument wird analysiert…", "Analizando el documento…", "Analisi del documento in corso…", "Document wordt geanalyseerd…", "A analisar o documento…", "Analiza dokumentu…"],
+    "Analyse impossible": ["Analysis failed", "Analyse fehlgeschlagen", "No se pudo analizar", "Analisi non riuscita", "Analyse mislukt", "Análise impossível", "Analiza nieudana"],
+    "Lecture de vos recettes Mealie…": ["Reading your Mealie recipes…", "Ihre Mealie-Rezepte werden gelesen…", "Leyendo tus recetas de Mealie…", "Lettura delle tue ricette Mealie…", "Uw Mealie-recepten lezen…", "A ler as suas receitas Mealie…", "Odczytywanie przepisów z Mealie…"],
+    "{n} recettes · {i} déjà importées": ["{n} recipes · {i} already imported", "{n} Rezepte · {i} bereits importiert", "{n} recetas · {i} ya importadas", "{n} ricette · {i} già importate", "{n} recepten · {i} al geïmporteerd", "{n} receitas · {i} já importadas", "{n} przepisów · {i} już zaimportowanych"],
+    "Tout cocher": ["Tick all", "Alle ankreuzen", "Marcar todo", "Seleziona tutto", "Alles aanvinken", "Marcar tudo", "Zaznacz wszystko"],
+    "Tout décocher": ["Untick all", "Alle abwählen", "Desmarcar todo", "Deseleziona tutto", "Alles uitvinken", "Desmarcar tudo", "Odznacz wszystko"],
+    "importée": ["imported", "importiert", "importada", "importata", "geïmporteerd", "importada", "zaimportowany"],
+    "Importer {n} recette": ["Import {n} recipe", "{n} Rezept importieren", "Importar {n} receta", "Importa {n} ricetta", "{n} recept importeren", "Importar {n} receita", "Importuj {n} przepis"],
+    "Importer {n} recettes": ["Import {n} recipes", "{n} Rezepte importieren", "Importar {n} recetas", "Importa {n} ricette", "{n} recepten importeren", "Importar {n} receitas", "Importuj {n} przepisów"],
+    "Import de {n} recettes…": ["Importing {n} recipes…", "{n} Rezepte werden importiert…", "Importando {n} recetas…", "Importazione di {n} ricette…", "{n} recepten importeren…", "A importar {n} receitas…", "Importowanie {n} przepisów…"],
+    "{n} recette(s) importée(s) depuis Mealie": ["{n} recipe(s) imported from Mealie", "{n} Rezept(e) aus Mealie importiert", "{n} receta(s) importada(s) desde Mealie", "{n} ricetta/e importata/e da Mealie", "{n} recept(en) geïmporteerd uit Mealie", "{n} receita(s) importada(s) do Mealie", "Zaimportowano z Mealie: {n}"],
+    "{n} erreur(s)": ["{n} error(s)", "{n} Fehler", "{n} error(es)", "{n} errore/i", "{n} fout(en)", "{n} erro(s)", "błędów: {n}"],
+    "Ajouter un ingrédient": ["Add an ingredient", "Zutat hinzufügen", "Añadir un ingrediente", "Aggiungi un ingrediente", "Ingrediënt toevoegen", "Adicionar um ingrediente", "Dodaj składnik"],
+    "Ex. purée, Nutella… ou un code-barre": ["e.g. mash, Nutella… or a barcode", "z. B. Püree, Nutella… oder ein Barcode", "Ej. puré, Nutella… o un código de barras", "Es. purè, Nutella… o un codice a barre", "Bijv. puree, Nutella… of een barcode", "Ex. puré, Nutella… ou um código de barras", "Np. puree, Nutella… lub kod kreskowy"],
+    "Scanner": ["Scan", "Scannen", "Escanear", "Scansiona", "Scannen", "Digitalizar", "Skanuj"],
+    "Scanner un code-barre": ["Scan a barcode", "Barcode scannen", "Escanear un código de barras", "Scansiona un codice a barre", "Barcode scannen", "Digitalizar um código de barras", "Skanuj kod kreskowy"],
+    "Recherche dans votre base et sur Open Food Facts…": ["Searching your database and Open Food Facts…", "Suche in Ihrer Datenbank und auf Open Food Facts…", "Buscando en tu base y en Open Food Facts…", "Ricerca nel tuo database e su Open Food Facts…", "Zoeken in uw database en op Open Food Facts…", "A pesquisar na sua base e no Open Food Facts…", "Wyszukiwanie w bazie i w Open Food Facts…"],
+    "Déjà dans votre base": ["Already in your database", "Bereits in Ihrer Datenbank", "Ya en tu base", "Già nel tuo database", "Al in uw database", "Já na sua base", "Już w bazie"],
+    "Nom dans votre base": ["Name in your database", "Name in Ihrer Datenbank", "Nombre en tu base", "Nome nel tuo database", "Naam in uw database", "Nome na sua base", "Nazwa w bazie"],
+    "Ajouter sans produit": ["Add without a product", "Ohne Produkt hinzufügen", "Añadir sin producto", "Aggiungi senza prodotto", "Toevoegen zonder product", "Adicionar sem produto", "Dodaj bez produktu"],
+    "vous pourrez associer un produit plus tard": ["you can link a product later", "Sie können später ein Produkt zuordnen", "podrás asociar un producto más tarde", "potrai associare un prodotto più tardi", "u kunt later een product koppelen", "poderá associar um produto mais tarde", "produkt możesz powiązać później"],
+    "Ou choisir un produit Open Food Facts": ["Or choose an Open Food Facts product", "Oder ein Open-Food-Facts-Produkt wählen", "O elige un producto de Open Food Facts", "Oppure scegli un prodotto Open Food Facts", "Of kies een Open Food Facts-product", "Ou escolha um produto Open Food Facts", "Lub wybierz produkt z Open Food Facts"],
+    "« {n} » ajouté": ["\"{n}\" added", "„{n}“ hinzugefügt", "«{n}» añadido", "«{n}» aggiunto", "\"{n}\" toegevoegd", "«{n}» adicionado", "Dodano „{n}”"],
+    "« {n} » ajouté avec sa fiche produit": ["\"{n}\" added with its product sheet", "„{n}“ mit Produktdaten hinzugefügt", "«{n}» añadido con su ficha de producto", "«{n}» aggiunto con la scheda prodotto", "\"{n}\" toegevoegd met productfiche", "«{n}» adicionado com a ficha de produto", "Dodano „{n}” z kartą produktu"],
+    "Code-barre": ["Barcode", "Barcode", "Código de barras", "Codice a barre", "Barcode", "Código de barras", "Kod kreskowy"],
+    "Recherche du produit sur Open Food Facts…": ["Looking up the product on Open Food Facts…", "Produkt wird auf Open Food Facts gesucht…", "Buscando el producto en Open Food Facts…", "Ricerca del prodotto su Open Food Facts…", "Product zoeken op Open Food Facts…", "A procurar o produto no Open Food Facts…", "Wyszukiwanie produktu w Open Food Facts…"],
+    "Scanner à nouveau": ["Scan again", "Erneut scannen", "Escanear de nuevo", "Scansiona di nuovo", "Opnieuw scannen", "Digitalizar novamente", "Skanuj ponownie"],
+    "« {n} » est déjà dans vos ingrédients": ["\"{n}\" is already in your ingredients", "„{n}“ ist bereits in Ihren Zutaten", "«{n}» ya está en tus ingredientes", "«{n}» è già tra i tuoi ingredienti", "\"{n}\" staat al bij uw ingrediënten", "«{n}» já está nos seus ingredientes", "„{n}” jest już w składnikach"],
+    "Ajouter à mes ingrédients": ["Add to my ingredients", "Zu meinen Zutaten hinzufügen", "Añadir a mis ingredientes", "Aggiungi ai miei ingredienti", "Aan mijn ingrediënten toevoegen", "Adicionar aos meus ingredientes", "Dodaj do moich składników"],
+    "Ouverture de la caméra…": ["Opening the camera…", "Kamera wird geöffnet…", "Abriendo la cámara…", "Apertura della fotocamera…", "Camera openen…", "A abrir a câmara…", "Otwieranie aparatu…"],
+    "Valider": ["Confirm", "Bestätigen", "Confirmar", "Conferma", "Bevestigen", "Confirmar", "Zatwierdź"],
+    "Photographier le code": ["Photograph the code", "Code fotografieren", "Fotografiar el código", "Fotografa il codice", "Code fotograferen", "Fotografar o código", "Sfotografuj kod"],
+    "ou tapez le numéro sous le code-barre": ["or type the number under the barcode", "oder die Nummer unter dem Barcode eingeben", "o escribe el número bajo el código de barras", "oppure digita il numero sotto il codice a barre", "of typ het nummer onder de barcode", "ou escreva o número por baixo do código de barras", "lub wpisz numer pod kodem kreskowym"],
+    "Lecture de la photo…": ["Reading the photo…", "Foto wird gelesen…", "Leyendo la foto…", "Lettura della foto…", "Foto lezen…", "A ler a foto…", "Odczytywanie zdjęcia…"],
+    "Aucun code-barre lu sur la photo. Réessayez de plus près.": ["No barcode read on the photo. Try again closer.", "Kein Barcode auf dem Foto erkannt. Versuchen Sie es näher.", "No se leyó ningún código en la foto. Inténtalo más cerca.", "Nessun codice a barre letto nella foto. Riprova più da vicino.", "Geen barcode gelezen op de foto. Probeer het dichterbij.", "Nenhum código lido na foto. Tente mais de perto.", "Nie odczytano kodu ze zdjęcia. Spróbuj bliżej."],
+    "Caméra indisponible ici : photographiez le code ou tapez son numéro.": ["Camera unavailable here: photograph the code or type its number.", "Kamera hier nicht verfügbar: Fotografieren Sie den Code oder geben Sie die Nummer ein.", "Cámara no disponible aquí: fotografía el código o escribe su número.", "Fotocamera non disponibile qui: fotografa il codice o digitane il numero.", "Camera hier niet beschikbaar: fotografeer de code of typ het nummer.", "Câmara indisponível aqui: fotografe o código ou escreva o número.", "Aparat niedostępny: sfotografuj kod lub wpisz numer."],
+    "Visez le code-barre": ["Aim at the barcode", "Auf den Barcode richten", "Apunta al código de barras", "Inquadra il codice a barre", "Richt op de barcode", "Aponte para o código de barras", "Wyceluj w kod kreskowy"],
+    "Chargement du lecteur…": ["Loading the reader…", "Leser wird geladen…", "Cargando el lector…", "Caricamento del lettore…", "Lezer laden…", "A carregar o leitor…", "Ładowanie czytnika…"],
+    "Caméra refusée ou indisponible : photographiez le code ou tapez son numéro.": ["Camera denied or unavailable: photograph the code or type its number.", "Kamera verweigert oder nicht verfügbar: Fotografieren Sie den Code oder geben Sie die Nummer ein.", "Cámara denegada o no disponible: fotografía el código o escribe su número.", "Fotocamera negata o non disponibile: fotografa il codice o digitane il numero.", "Camera geweigerd of niet beschikbaar: fotografeer de code of typ het nummer.", "Câmara recusada ou indisponível: fotografe o código ou escreva o número.", "Brak dostępu do aparatu: sfotografuj kod lub wpisz numer."],
+    "Énergie": ["Energy", "Energie", "Energía", "Energia", "Energie", "Energia", "Energia"],
+    "Matières grasses": ["Fat", "Fett", "Grasas", "Grassi", "Vetten", "Lípidos", "Tłuszcz"],
+    "dont saturées": ["of which saturates", "davon gesättigte", "de las cuales saturadas", "di cui saturi", "waarvan verzadigd", "dos quais saturados", "w tym nasycone"],
+    "Glucides": ["Carbohydrates", "Kohlenhydrate", "Hidratos de carbono", "Carboidrati", "Koolhydraten", "Hidratos de carbono", "Węglowodany"],
+    "dont sucres": ["of which sugars", "davon Zucker", "de los cuales azúcares", "di cui zuccheri", "waarvan suikers", "dos quais açúcares", "w tym cukry"],
+    "Fibres": ["Fibre", "Ballaststoffe", "Fibra", "Fibre", "Vezels", "Fibra", "Błonnik"],
+    "Protéines": ["Protein", "Eiweiß", "Proteínas", "Proteine", "Eiwitten", "Proteínas", "Białko"],
+    "Sel": ["Salt", "Salz", "Sal", "Sale", "Zout", "Sal", "Sól"],
+    "Sans marque": ["No brand", "Ohne Marke", "Sin marca", "Senza marca", "Geen merk", "Sem marca", "Bez marki"],
+    "Fiche Open Food Facts": ["Open Food Facts sheet", "Open-Food-Facts-Seite", "Ficha de Open Food Facts", "Scheda Open Food Facts", "Open Food Facts-fiche", "Ficha Open Food Facts", "Karta Open Food Facts"],
+    "Pour 100 g": ["Per 100 g", "Pro 100 g", "Por 100 g", "Per 100 g", "Per 100 g", "Por 100 g", "Na 100 g"],
+    "Composition": ["Ingredients list", "Zusammensetzung", "Composición", "Composizione", "Samenstelling", "Composição", "Skład"],
+    "Allergènes": ["Allergens", "Allergene", "Alérgenos", "Allergeni", "Allergenen", "Alergénios", "Alergeny"],
+    "Labels": ["Labels", "Siegel", "Sellos", "Etichette", "Keurmerken", "Selos", "Oznaczenia"],
+    "Dans les recettes": ["In recipes", "In Rezepten", "En las recetas", "Nelle ricette", "In recepten", "Nas receitas", "W przepisach"],
+    "Fiche": ["Details", "Details", "Ficha", "Scheda", "Fiche", "Ficha", "Karta"],
+    "Créer un rayon": ["Create an aisle", "Abteilung erstellen", "Crear una sección", "Crea un reparto", "Afdeling aanmaken", "Criar uma secção", "Utwórz dział"],
+    "Marque": ["Brand", "Marke", "Marca", "Marca", "Merk", "Marca", "Marka"],
+    "Conditionnement": ["Packaging", "Packungsgröße", "Envase", "Confezione", "Verpakking", "Embalagem", "Opakowanie"],
+    "Magasins": ["Shops", "Geschäfte", "Tiendas", "Negozi", "Winkels", "Lojas", "Sklepy"],
+    "500 g, 1 l…": ["500 g, 1 l…", "500 g, 1 l…", "500 g, 1 l…", "500 g, 1 l…", "500 g, 1 l…", "500 g, 1 l…", "500 g, 1 l…"],
+    "Ex. prendre la version bio": ["e.g. get the organic version", "z. B. die Bio-Version nehmen", "Ej. coger la versión ecológica", "Es. prendere la versione bio", "Bijv. de biologische versie nemen", "Ex. levar a versão biológica", "Np. wybierz wersję bio"],
+    "Changer de produit": ["Change product", "Produkt wechseln", "Cambiar de producto", "Cambia prodotto", "Ander product", "Mudar de produto", "Zmień produkt"],
+    "Associer un produit Open Food Facts": ["Link an Open Food Facts product", "Open-Food-Facts-Produkt zuordnen", "Asociar un producto de Open Food Facts", "Associa un prodotto Open Food Facts", "Open Food Facts-product koppelen", "Associar um produto Open Food Facts", "Powiąż produkt z Open Food Facts"],
+    "Utilisé dans {n} recette": ["Used in {n} recipe", "In {n} Rezept verwendet", "Usado en {n} receta", "Usato in {n} ricetta", "Gebruikt in {n} recept", "Usado em {n} receita", "Użyty w {n} przepisie"],
+    "Utilisé dans {n} recettes": ["Used in {n} recipes", "In {n} Rezepten verwendet", "Usado en {n} recetas", "Usato in {n} ricette", "Gebruikt in {n} recepten", "Usado em {n} receitas", "Użyty w {n} przepisach"],
+    "Aucune.": ["None.", "Keine.", "Ninguna.", "Nessuna.", "Geen.", "Nenhuma.", "Brak."],
+    "Supprimer l'ingrédient": ["Delete ingredient", "Zutat löschen", "Eliminar el ingrediente", "Elimina l'ingrediente", "Ingrediënt verwijderen", "Eliminar o ingrediente", "Usuń składnik"],
+    "Photo enregistrée": ["Photo saved", "Foto gespeichert", "Foto guardada", "Foto salvata", "Foto opgeslagen", "Foto guardada", "Zdjęcie zapisane"],
+    "Ingrédient enregistré": ["Ingredient saved", "Zutat gespeichert", "Ingrediente guardado", "Ingrediente salvato", "Ingrediënt opgeslagen", "Ingrediente guardado", "Składnik zapisany"],
+    "Supprimer « {n} » ? Les recettes garderont le texte de l'ingrédient.": ["Delete \"{n}\"? Recipes will keep the ingredient's text.", "„{n}“ löschen? Die Rezepte behalten den Text der Zutat.", "¿Eliminar «{n}»? Las recetas conservarán el texto del ingrediente.", "Eliminare «{n}»? Le ricette manterranno il testo dell'ingrediente.", "\"{n}\" verwijderen? De recepten behouden de tekst van het ingrediënt.", "Eliminar «{n}»? As receitas manterão o texto do ingrediente.", "Usunąć „{n}”? Przepisy zachowają tekst składnika."],
+    "Produit pour « {n} »": ["Product for \"{n}\"", "Produkt für „{n}“", "Producto para «{n}»", "Prodotto per «{n}»", "Product voor \"{n}\"", "Produto para «{n}»", "Produkt dla „{n}”"],
+    "Recherche sur Open Food Facts…": ["Searching Open Food Facts…", "Suche auf Open Food Facts…", "Buscando en Open Food Facts…", "Ricerca su Open Food Facts…", "Zoeken op Open Food Facts…", "A pesquisar no Open Food Facts…", "Wyszukiwanie w Open Food Facts…"],
+    "Aucun produit trouvé.": ["No product found.", "Kein Produkt gefunden.", "No se encontró ningún producto.", "Nessun prodotto trovato.", "Geen product gevonden.", "Nenhum produto encontrado.", "Nie znaleziono produktu."],
+    "Produit associé": ["Product linked", "Produkt zugeordnet", "Producto asociado", "Prodotto associato", "Product gekoppeld", "Produto associado", "Produkt powiązany"],
+    "Affichage": ["Display", "Anzeige", "Visualización", "Visualizzazione", "Weergave", "Apresentação", "Widok"],
+    "Onglet à l'ouverture": ["Tab on opening", "Tab beim Öffnen", "Pestaña al abrir", "Scheda all'apertura", "Tabblad bij openen", "Separador ao abrir", "Karta przy otwarciu"],
+    "Afficher le cadre": ["Show the frame", "Rahmen anzeigen", "Mostrar el marco", "Mostra la cornice", "Kader tonen", "Mostrar a moldura", "Pokaż ramkę"],
+    "Repas affichés (toutes les vues)": ["Meals shown (all views)", "Angezeigte Mahlzeiten (alle Ansichten)", "Comidas mostradas (todas las vistas)", "Pasti mostrati (tutte le viste)", "Getoonde maaltijden (alle weergaven)", "Refeições apresentadas (todas as vistas)", "Wyświetlane posiłki (wszystkie widoki)"],
+    "Hauteur des listes en px (0 = sans limite)": ["List height in px (0 = no limit)", "Listenhöhe in px (0 = unbegrenzt)", "Altura de las listas en px (0 = sin límite)", "Altezza delle liste in px (0 = senza limite)", "Lijsthoogte in px (0 = onbeperkt)", "Altura das listas em px (0 = sem limite)", "Wysokość list w px (0 = bez limitu)"],
+    "Complet (semaine, recettes, ingrédients, courses)": ["Full (week, recipes, ingredients, shopping)", "Vollständig (Woche, Rezepte, Zutaten, Einkauf)", "Completo (semana, recetas, ingredientes, compra)", "Completo (settimana, ricette, ingredienti, spesa)", "Volledig (week, recepten, ingrediënten, boodschappen)", "Completo (semana, receitas, ingredientes, compras)", "Pełny (tydzień, przepisy, składniki, zakupy)"],
+    "Menu du jour (compact, consultation)": ["Today's menu (compact, view only)", "Tagesmenü (kompakt, nur Ansicht)", "Menú del día (compacto, consulta)", "Menu del giorno (compatto, consultazione)", "Menu van vandaag (compact, alleen bekijken)", "Menu do dia (compacto, consulta)", "Menu dnia (kompaktowe, podgląd)"],
+    "Semaine (planning, consultation)": ["Week (planner, view only)", "Woche (Planung, nur Ansicht)", "Semana (planificación, consulta)", "Settimana (pianificazione, consultazione)", "Week (planning, alleen bekijken)", "Semana (planeamento, consulta)", "Tydzień (plan, podgląd)"],
+    "Statistiques": ["Statistics", "Statistiken", "Estadísticas", "Statistiche", "Statistieken", "Estatísticas", "Statystyki"],
+    "Menus de la semaine, recettes (Marmiton, Jow, Mealie), ingrédients (Open Food Facts) et liste de courses": ["Weekly menus, recipes (Marmiton, Jow, Mealie), ingredients (Open Food Facts) and shopping list", "Wochenmenüs, Rezepte (Marmiton, Jow, Mealie), Zutaten (Open Food Facts) und Einkaufsliste", "Menús semanales, recetas (Marmiton, Jow, Mealie), ingredientes (Open Food Facts) y lista de la compra", "Menu della settimana, ricette (Marmiton, Jow, Mealie), ingredienti (Open Food Facts) e lista della spesa", "Weekmenu's, recepten (Marmiton, Jow, Mealie), ingrediënten (Open Food Facts) en boodschappenlijst", "Menus da semana, receitas (Marmiton, Jow, Mealie), ingredientes (Open Food Facts) e lista de compras", "Menu tygodnia, przepisy (Marmiton, Jow, Mealie), składniki (Open Food Facts) i lista zakupów"],
+    "Aucun envoi": ["Nothing sent yet", "Noch nichts gesendet", "Ningún envío", "Nessun invio", "Nog niets verzonden", "Nenhum envio", "Brak wysyłek"]
+  };
+  let LANG = "fr", NUMLOC = "fr-FR";
+  const langOf = (hass, c) => { const l = String((c && c.language) || (hass && ((hass.locale && hass.locale.language) || hass.language)) || navigator.language || "en").toLowerCase().split(/[-_]/)[0]; return l === "fr" || HOLM_LANGS.includes(l) ? l : "en"; };
+  const setLang = (hass, c) => { LANG = langOf(hass, c); const p = hass && hass.locale && hass.locale.language; NUMLOC = !(c && c.language) && p && p.toLowerCase().startsWith(LANG) ? p : LOCALES[LANG]; return LANG; };
+  const _ = (s, v) => { let o = LANG === "fr" ? s : ((I18N[s] && I18N[s][HOLM_LANGS.indexOf(LANG)]) || s); if (v) for (const k in v) o = o.split("{" + k + "}").join(v[k]); return o; };
+  // champ « Langue » pour les éditeurs visuels (ha-form)
+  const langField = () => ({ name: "language", selector: { select: { mode: "dropdown", options: [{ value: "", label: _("Automatique (profil)") }, ...Object.entries(LANG_NAMES).map(([value, label]) => ({ value, label }))] } } });
+  // traduit les titres de sections et les libellés d'options d'un schéma ha-form (écrits en français)
+  const locSchema = (sc) => (sc || []).map((x) => { const o = { ...x }; if (o.title) o.title = _(o.title); if (o.schema) o.schema = locSchema(o.schema);
+    if (o.selector && o.selector.select && o.name !== "language") o.selector = { ...o.selector, select: { ...o.selector.select, options: (o.selector.select.options || []).map((op) => (typeof op === "string" ? op : { ...op, label: _(op.label) })) } };
+    if (o.name === "language" && o.selector && o.selector.select) o.selector = { ...o.selector, select: { ...o.selector.select, options: o.selector.select.options.map((op) => (op.value ? op : { ...op, label: _("Automatique (profil)") })) } };
+    return o; });
+const VERSION = "1.2.0";
 // Shared by the Telegram sharing dialog and the calendar export dialog.
 const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v == null ? d : v; } catch (_) { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
@@ -13,19 +454,20 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 const monday = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); const k = (x.getDay() + 6) % 7; return addDays(x, -k); };
-const fdate = (d, o) => d.toLocaleDateString("fr-FR", o);
+const fdate = (d, o) => d.toLocaleDateString(NUMLOC, o);
 const SHOP_MAX_DAYS = 31;   // même limite que l'intégration
 // libellé d'une période de courses : « semaine du … » pour un lundi → dimanche, sinon « du … au … » (#12)
-const shopRange = (start, end, long = false) => {
+const shopRange = (start, end, long = false, gen = false) => {
   const a = typeof start === "string" ? new Date(start + "T00:00") : start, b = typeof end === "string" ? new Date(end + "T00:00") : end;
   const o = long ? { day: "numeric", month: "long" } : { weekday: "short", day: "numeric", month: "short" };
-  if (a.getDay() === 1 && Math.round((b - a) / 864e5) === 6) return `semaine du ${fdate(a, { day: "numeric", month: long ? "long" : "short" })}`;
-  if (iso(a) === iso(b)) return `le ${fdate(a, o)}`;
-  return `du ${fdate(a, o)} au ${fdate(b, o)}`;
+  if (a.getDay() === 1 && Math.round((b - a) / 864e5) === 6) return _(gen ? _("Générée pour la semaine du {d}") : _("semaine du {d}"), { d: fdate(a, { day: "numeric", month: long ? "long" : "short" }) });
+  if (iso(a) === iso(b)) return _(gen ? _("Générée pour le {d}") : _("le {d}"), { d: fdate(a, o) });
+  return _(gen ? _("Générée du {a} au {b}") : _("du {a} au {b}"), { a: fdate(a, o), b: fdate(b, o) });
 };
 const mins = (m) => (!m ? "" : m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? String(m % 60).padStart(2, "0") : ""}` : `${m} min`);
 const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-const SLOT_LBL = { midi: "Midi", soir: "Soir" };
+const _T = (o) => new Proxy(o, { get: (t, k) => { const v = t[k]; return typeof v === "string" ? _(v) : v && typeof v === "object" ? _T(v) : v; } });
+const SLOT_LBL = _T({ midi: _("Midi"), soir: _("Soir") });
 const NUTRI = { a: "#038141", b: "#85bb2f", c: "#fecb02", d: "#ee8100", e: "#e63e11" };
 const fq = (q) => { if (q == null) return ""; const r = Math.round(q * 100) / 100; return (r === Math.floor(r) ? String(r) : String(r).replace(".", ",")); };
 
@@ -71,15 +513,17 @@ class HolmMyMenuCard extends HTMLElement {
     if (this.shadowRoot && !this._editingRecipe && !this._editingReminder) this._render();
   }
   set hass(h) {
+    const _pl = this._lang;
     this._hass = h;
     if (!this.shadowRoot) { this.attachShadow({ mode: "open" }); this._render(); }
+    else if (_pl && langOf(h, this._c) !== _pl && !this._editingRecipe && !this._editingReminder) this._render();
     if (!this._sub && h.connection) this._subscribe();
   }
   connectedCallback() { if (this._hass && !this._sub) this._subscribe(); }
   disconnectedCallback() { if (this._sub) { this._sub.then((u) => u && u()).catch(() => {}); this._sub = null; } }
   _subscribe() {
     this._sub = this._hass.connection.subscribeMessage((m) => { this._s = m.state; this._update(); this._refreshModal(); }, { type: "holm_mymenu/subscribe" });
-    this._sub.catch((e) => { this._err = e && e.code === "unknown_command" ? "L'intégration HOLM My Menu n'est pas installée ou pas encore chargée." : (e && e.message) || String(e); this._sub = null; this._render(); });
+    this._sub.catch((e) => { this._err = e && e.code === "unknown_command" ? _("L'intégration HOLM My Menu n'est pas installée ou pas encore chargée.") : (e && e.message) || String(e); this._sub = null; this._render(); });
   }
   _update() {
     // Les notifications Home Assistant peuvent arriver pendant une sélection
@@ -102,20 +546,21 @@ class HolmMyMenuCard extends HTMLElement {
     keepScroll(this, () => this._renderNow());
   }
   _renderNow() {
+    this._lang = setLang(this._hass, this._c);
     const c = this._c, s = this._s;
     let body;
     if (this._err) body = `<div class="empty">${esc(this._err)}</div>`;
-    else if (!s) body = `<div class="empty">Chargement…</div>`;
+    else if (!s) body = `<div class="empty">${_("Chargement…")}</div>`;
     else if (c.view === "today") body = this._today();
     else if (c.view === "week") body = this._weekRO();
     else if (c.view === "stats") body = this._statsView();
     else body = ({ week: this._weekView, recipes: this._recipesView, ingredients: this._ingView, shopping: this._shopView, reminders: this._remindersView, stats: this._statsView }[this._tab] || this._weekView).call(this);
-    const tabs = [["week", "mdi:calendar-week", "Semaine"], ["recipes", "mdi:book-open-page-variant", "Recettes"], ["ingredients", "mdi:food-apple", "Ingrédients"], ["shopping", "mdi:cart-outline", "Courses"], ["reminders", "mdi:bell-outline", "Rappels"], ["stats", "mdi:chart-box-outline", "Stats"]];
+    const tabs = [["week", "mdi:calendar-week", _("Semaine")], ["recipes", "mdi:book-open-page-variant", _("Recettes")], ["ingredients", "mdi:food-apple", _("Ingrédients")], ["shopping", "mdi:cart-outline", _("Courses")], ["reminders", "mdi:bell-outline", _("Rappels")], ["stats", "mdi:chart-box-outline", _("Stats")]];
     const nShop = s ? (s.shopping.items || []).filter((i) => !i.checked).length : 0;
     const keepModal = this.shadowRoot.querySelector(".modal-root");
     this.shadowRoot.innerHTML = `<style>${CSS}</style>
       <ha-card class="${c.show_frame === false ? "noframe" : ""}">
-        <div class="hd"><div class="tt"><ha-icon icon="mdi:silverware-variant"></ha-icon>${esc(c.title)}</div>
+        <div class="hd"><div class="tt"><ha-icon icon="mdi:silverware-variant"></ha-icon>${esc(c.title === "Menus" ? _("Menus") : c.title)}</div>
           ${c.view === "today" || c.view === "week" || c.view === "stats" ? "" : `<div class="tabs">${tabs.map(([k, i, l]) => `<button class="tab ${this._tab === k ? "on" : ""}" data-tab="${k}"><ha-icon icon="${i}"></ha-icon><span>${l}</span>${k === "shopping" && nShop ? `<em>${nShop}</em>` : ""}</button>`).join("")}</div>`}
         </div>
         <div class="bd">${body}</div>
@@ -124,7 +569,7 @@ class HolmMyMenuCard extends HTMLElement {
     this._bind();
   }
   _moreHtml(more, total, word) {
-    return more > 0 ? `<button class="more" data-act="more">Afficher la suite · ${more} ${word}${more > 1 ? "s" : ""} sur ${total}</button>` : "";
+    return more > 0 ? `<button class="more" data-act="more">${_("Afficher la suite · {n} sur {t}", { n: more, t: total })}</button>` : "";
   }
   _watchMore(lst, root) {
     if (this._moreObs) this._moreObs.disconnect();
@@ -199,19 +644,19 @@ class HolmMyMenuCard extends HTMLElement {
       case "add-ing": return this._addIngModal(this._q.ingredients || "");
       case "reminder-add": return this._reminderModal();
       case "reminder-edit": return this._reminderModal(d.id);
-      case "reminder-test": return this._do(this._ws("reminder/test", {reminder_id:d.id}), "Test du rappel effectué");
+      case "reminder-test": return this._do(this._ws("reminder/test", {reminder_id:d.id}), _("Test du rappel effectué"));
       case "reminder-toggle": { const r=(this._s.reminders||[]).find(x=>x.id===d.id); if(r) return this._ws("reminder/save",{reminder_id:r.id,reminder:{...r,enabled:!r.enabled}}); return; }
-      case "reminder-delete": if(confirm("Supprimer ce rappel ?")) return this._ws("reminder/delete",{reminder_id:d.id}); return;
+      case "reminder-delete": if(confirm(_("Supprimer ce rappel ?"))) return this._ws("reminder/delete",{reminder_id:d.id}); return;
       case "shop-gen": {
         if (this._shopMode === "dates") {
           const [f, t] = this._shopDates();
-          if (t < f) return this._toast("La date de fin est avant la date de début");
-          if (Math.round((t - f) / 864e5) + 1 > SHOP_MAX_DAYS) return this._toast(`Période trop longue (${SHOP_MAX_DAYS} jours au maximum)`);
-          await this._do(this._ws("shopping/generate", { start: iso(f), end: iso(t) }), "Liste de courses générée");
+          if (t < f) return this._toast(_("La date de fin est avant la date de début"));
+          if (Math.round((t - f) / 864e5) + 1 > SHOP_MAX_DAYS) return this._toast(_("Période trop longue ({n} jours au maximum)", { n: SHOP_MAX_DAYS }));
+          await this._do(this._ws("shopping/generate", { start: iso(f), end: iso(t) }), _("Liste de courses générée"));
           return;
         }
         const st = this._shopWeek || monday(new Date());
-        await this._do(this._ws("shopping/generate", { start: iso(st), end: iso(addDays(st, 6)) }), "Liste de courses générée");
+        await this._do(this._ws("shopping/generate", { start: iso(st), end: iso(addDays(st, 6)) }), _("Liste de courses générée"));
         return;
       }
       case "shop-mode": {
@@ -238,9 +683,9 @@ class HolmMyMenuCard extends HTMLElement {
       case "shop-category": return this._categoryModal();
       case "shop-restore": return this._restoreShopModal();
       case "shop-clear-checked": return this._ws("shopping/remove", { checked_only: true });
-      case "shop-clear": if (confirm("Vider toute la liste de courses ?")) return this._ws("shopping/remove", {}); return;
+      case "shop-clear": if (confirm(_("Vider toute la liste de courses ?"))) return this._ws("shopping/remove", {}); return;
       case "shop-share": return this._shareModal();
-      case "shop-copy": try { await navigator.clipboard.writeText(this._shopText()); this._toast("Liste copiée"); } catch (_) { this._toast("Copie impossible sur cet appareil"); } return;
+      case "shop-copy": try { await navigator.clipboard.writeText(this._shopText()); this._toast(_("Liste copiée")); } catch (_) { this._toast(_("Copie impossible sur cet appareil")); } return;
       case "today-slot": return this._slotModal(d.day, d.slot);
       case "view-recipe": return this._recipeModal(d.id, null, { readonly: true, servings: +d.sv || 0 });
       case "view-ing": return this._ingModal(d.id, true);
@@ -266,14 +711,14 @@ class HolmMyMenuCard extends HTMLElement {
     const days = [...Array(7)].map((_, i) => addDays(w0, i));
     const w1 = days[6];
     return `<div class="bar"><button class="ib" data-act="week-prev"><ha-icon icon="mdi:chevron-left"></ha-icon></button>
-        <div class="wk">Semaine du ${fdate(w0, { day: "numeric", month: w0.getMonth() === w1.getMonth() ? undefined : "short" })} au ${fdate(w1, { day: "numeric", month: "long" })}</div>
+        <div class="wk">${_("Semaine du {a} au {b}", { a: fdate(w0, { day: "numeric", month: w0.getMonth() === w1.getMonth() ? undefined : "short" }), b: fdate(w1, { day: "numeric", month: "long" }) })}</div>
         <button class="ib" data-act="week-next"><ha-icon icon="mdi:chevron-right"></ha-icon></button>
-        <button class="pill" data-act="week-now">Aujourd'hui</button>
-        <button class="pill" data-act="calendar-export"><ha-icon icon="mdi:calendar-plus"></ha-icon>Ajouter au calendrier</button></div>
+        <button class="pill" data-act="week-now">${_("Aujourd'hui")}</button>
+        <button class="pill" data-act="calendar-export"><ha-icon icon="mdi:calendar-plus"></ha-icon>${_("Ajouter au calendrier")}</button></div>
       <div class="week">${days.map((d) => { const k = iso(d); return `<div class="day ${k === today ? "today" : ""} ${k < today ? "past" : ""}">
           <div class="dn"><b>${fdate(d, { weekday: "short" })}</b><span>${d.getDate()}</span></div>
           ${this._viewSlots().map((sl) => this._slotHtml(k, sl)).join("")}</div>`; }).join("")}</div>
-      <div class="hint">Toucher un repas pour le choisir · glisser un repas sur un autre pour les échanger (Ctrl pour copier)</div>`;
+      <div class="hint">${_("Toucher un repas pour le choisir · glisser un repas sur un autre pour les échanger (Ctrl pour copier)")}</div>`;
   }
   _viewSlots() {
     const s = this._s, want = Array.isArray(this._c.today_slots) && this._c.today_slots.length ? this._c.today_slots : s.slots;
@@ -291,8 +736,8 @@ class HolmMyMenuCard extends HTMLElement {
       <div class="thero ${bg.cls} ${!top && ings.length ? "mini" : ""}" ${bg.attr}>${bg.html}
         <span class="sl">${SLOT_LBL[sl]}</span>
         ${top ? `<div class="tents">
-          ${recs.map((e) => { const r = s.recipes[e.recipe_id]; return `<button class="te" data-act="view-recipe" data-id="${r.id}" data-sv="${e.servings || ""}"><b>${esc(r.name)}</b>${small ? "" : `<small>${[r.total ? mins(r.total) : "", e.servings ? `${e.servings} pers.` : ""].filter(Boolean).join(" · ")}</small>`}</button>`; }).join("")}
-          ${txts.map((e) => `<div class="te txt"><i>${esc(e.text)}</i></div>`).join("")}</div>` : entries.length ? "" : `<div class="tempty">Rien de prévu</div>`}
+          ${recs.map((e) => { const r = s.recipes[e.recipe_id]; return `<button class="te" data-act="view-recipe" data-id="${r.id}" data-sv="${e.servings || ""}"><b>${esc(r.name)}</b>${small ? "" : `<small>${[r.total ? mins(r.total) : "", e.servings ? _("{n} pers.", { n: e.servings }) : ""].filter(Boolean).join(" · ")}</small>`}</button>`; }).join("")}
+          ${txts.map((e) => `<div class="te txt"><i>${esc(e.text)}</i></div>`).join("")}</div>` : entries.length ? "" : `<div class="tempty">${_("Rien de prévu")}</div>`}
       </div>
       ${ings.length ? `<div class="tings">${ings.map((e) => { const i = s.ingredients[e.ingredient_id]; return `<button class="tchip" data-act="view-ing" data-id="${i.id}">${i.image ? `<span class="ti" style="background-image:url('${esc(i.image)}')"></span>` : `<span class="ti no"><ha-icon icon="mdi:food-apple-outline"></ha-icon></span>`}<span class="tn">${esc(i.name)}</span></button>`; }).join("")}</div>` : ""}</div>`;
   }
@@ -304,10 +749,10 @@ class HolmMyMenuCard extends HTMLElement {
     const w0 = this._week, today = iso(new Date()), slots = this._viewSlots();
     const days = [...Array(7)].map((_, i) => addDays(w0, i)), w1 = days[6];
     return `<div class="bar"><button class="ib" data-act="week-prev"><ha-icon icon="mdi:chevron-left"></ha-icon></button>
-        <div class="wk">Semaine du ${fdate(w0, { day: "numeric", month: w0.getMonth() === w1.getMonth() ? undefined : "short" })} au ${fdate(w1, { day: "numeric", month: "long" })}</div>
+        <div class="wk">${_("Semaine du {a} au {b}", { a: fdate(w0, { day: "numeric", month: w0.getMonth() === w1.getMonth() ? undefined : "short" }), b: fdate(w1, { day: "numeric", month: "long" }) })}</div>
         <button class="ib" data-act="week-next"><ha-icon icon="mdi:chevron-right"></ha-icon></button>
-        ${iso(w0) === iso(monday(new Date())) ? "" : `<button class="pill" data-act="week-now">Aujourd'hui</button>`}
-        <button class="pill" data-act="calendar-export"><ha-icon icon="mdi:calendar-plus"></ha-icon>Ajouter au calendrier</button></div>
+        ${iso(w0) === iso(monday(new Date())) ? "" : `<button class="pill" data-act="week-now">${_("Aujourd'hui")}</button>`}
+        <button class="pill" data-act="calendar-export"><ha-icon icon="mdi:calendar-plus"></ha-icon>${_("Ajouter au calendrier")}</button></div>
       <div class="weekro n${slots.length}">${days.map((d) => { const k = iso(d); return `<div class="rday ${k === today ? "today" : ""} ${k < today ? "past" : ""}">
           <div class="rdn"><b>${fdate(d, { weekday: "long" })}</b><span>${d.getDate()}</span></div>
           <div class="rsl">${slots.map((sl) => this._tile(k, sl, true)).join("")}</div></div>`; }).join("")}</div>`;
@@ -330,41 +775,41 @@ class HolmMyMenuCard extends HTMLElement {
         if (recipes.length) preview.push({ day, slot, hour, names: recipes.map(r => r.name) });
       }
     }
-    const mb = this._modal("Ajouter les recettes au calendrier", `
-      <div class="muted">Semaine du ${esc(fdate(w0, { day: "numeric", month: "long" }))} au ${esc(fdate(addDays(w0, 6), { day: "numeric", month: "long" }))}</div>
-      <div class="sh" style="margin-top:14px">Calendrier de destination</div>
+    const mb = this._modal(_("Ajouter les recettes au calendrier"), `
+      <div class="muted">${_("Semaine du {a} au {b}", { a: esc(fdate(w0, { day: "numeric", month: "long" })), b: esc(fdate(addDays(w0, 6), { day: "numeric", month: "long" })) })}</div>
+      <div class="sh" style="margin-top:14px">${_("Calendrier de destination")}</div>
       <select class="f cal-target" style="width:100%">
-        <option value="">Choisir un calendrier…</option>
+        <option value="">${_("Choisir un calendrier…")}</option>
         ${calendars.map(c => `<option value="${esc(c.entity_id)}" ${savedCalendar === c.entity_id ? "selected" : ""}>${esc(c.attributes.friendly_name || c.entity_id)} (${esc(c.entity_id)})</option>`).join("")}
       </select>
-      ${!calendars.length ? `<div class="muted">Aucun calendrier Home Assistant disponible.</div>` : ""}
-      <div class="sh" style="margin-top:14px">Préfixe des événements</div>
+      ${!calendars.length ? `<div class="muted">${_("Aucun calendrier Home Assistant disponible.")}</div>` : ""}
+      <div class="sh" style="margin-top:14px">${_("Préfixe des événements")}</div>
       <input class="f cal-prefix" style="width:100%;box-sizing:border-box" maxlength="80" placeholder="Ex. HOLM - " value="${esc(prefix)}">
-      <div class="sh" style="margin-top:16px">Aperçu · ${preview.length} événement${preview.length > 1 ? "s" : ""}</div>
+      <div class="sh" style="margin-top:16px">${_(preview.length > 1 ? _("Aperçu · {n} événements") : _("Aperçu · {n} événement"), { n: preview.length })}</div>
       <div style="max-height:260px;overflow:auto">
         ${preview.length ? preview.map(p => `<div style="padding:9px 0;border-bottom:1px solid var(--divider-color)">
-          <b>${esc(fdate(new Date(p.day + "T12:00:00"), { weekday: "long", day: "numeric", month: "short" }))} · ${p.slot === "midi" ? "Midi" : "Soir"} (${p.hour})</b>
-          <div class="muted">${esc(p.names.join(" · "))}</div></div>`).join("") : `<div class="muted">Aucune recette planifiée cette semaine.</div>`}
+          <b>${esc(fdate(new Date(p.day + "T12:00:00"), { weekday: "long", day: "numeric", month: "short" }))} · ${p.slot === "midi" ? _("Midi") : _("Soir")} (${p.hour})</b>
+          <div class="muted">${esc(p.names.join(" · "))}</div></div>`).join("") : `<div class="muted">${_("Aucune recette planifiée cette semaine.")}</div>`}
       </div>
-      <div class="muted" style="margin-top:12px">La synchronisation recherche les événements HOLM déjà présents et évite les doublons. Les modifications et suppressions nécessitent des services pris en charge par le calendrier.</div>
-      <div class="sh" style="margin-top:14px">Mode d’export</div>
-      <select class="f cal-mode" style="width:100%"><option value="sync">Synchroniser la semaine (ajouter, modifier, supprimer)</option><option value="missing">Ajouter uniquement les événements manquants</option></select>
+      <div class="muted" style="margin-top:12px">${_("La synchronisation recherche les événements HOLM déjà présents et évite les doublons. Les modifications et suppressions nécessitent des services pris en charge par le calendrier.")}</div>
+      <div class="sh" style="margin-top:14px">${_("Mode d’export")}</div>
+      <select class="f cal-mode" style="width:100%"><option value="sync">${_("Synchroniser la semaine (ajouter, modifier, supprimer)")}</option><option value="missing">${_("Ajouter uniquement les événements manquants")}</option></select>
       <div class="cal-confirm" hidden style="margin-top:16px;padding:16px;border:1px solid var(--divider-color);border-radius:16px;background:var(--secondary-background-color)">
         <div style="display:flex;align-items:flex-start;gap:12px">
           <ha-icon icon="mdi:calendar-sync" style="color:var(--primary-color);flex-shrink:0;margin-top:2px"></ha-icon>
           <div>
-            <div style="font-weight:700;font-size:1.05em">Confirmer la synchronisation</div>
-            <div class="muted" style="margin-top:6px;line-height:1.5">Les événements HOLM de cette semaine seront mis à jour. Ceux qui correspondent à des repas supprimés pourront être effacés du calendrier sélectionné. Les autres événements ne seront pas touchés.</div>
+            <div style="font-weight:700;font-size:1.05em">${_("Confirmer la synchronisation")}</div>
+            <div class="muted" style="margin-top:6px;line-height:1.5">${_("Les événements HOLM de cette semaine seront mis à jour. Ceux qui correspondent à des repas supprimés pourront être effacés du calendrier sélectionné. Les autres événements ne seront pas touchés.")}</div>
             <div class="muted cal-confirm-target" style="margin-top:10px;font-weight:600"></div>
           </div>
         </div>
         <div class="row end" style="margin-top:16px;gap:8px;flex-wrap:wrap">
-          <button class="pill" data-x="back-confirm"><ha-icon icon="mdi:arrow-left"></ha-icon>Retour</button>
-          <button class="pill main" data-x="confirm-sync"><ha-icon icon="mdi:check"></ha-icon>Confirmer la synchronisation</button>
+          <button class="pill" data-x="back-confirm"><ha-icon icon="mdi:arrow-left"></ha-icon>${_("Retour")}</button>
+          <button class="pill main" data-x="confirm-sync"><ha-icon icon="mdi:check"></ha-icon>${_("Confirmer la synchronisation")}</button>
         </div>
       </div>
-      <div class="row end cal-actions" style="margin-top:16px"><button class="pill" data-x="cancel">Annuler</button>
-        <button class="pill main" data-x="create" ${!preview.length || !calendars.length ? "disabled" : ""}><ha-icon icon="mdi:calendar-plus"></ha-icon>Créer ${preview.length} événement${preview.length > 1 ? "s" : ""}</button></div>
+      <div class="row end cal-actions" style="margin-top:16px"><button class="pill" data-x="cancel">${_("Annuler")}</button>
+        <button class="pill main" data-x="create" ${!preview.length || !calendars.length ? "disabled" : ""}><ha-icon icon="mdi:calendar-plus"></ha-icon>${_(preview.length > 1 ? _("Créer {n} événements") : _("Créer {n} événement"), { n: preview.length })}</button></div>
     `, { wide: true });
     mb.querySelector('[data-x="cancel"]').addEventListener("click", () => this._close());
     const confirmPanel = mb.querySelector(".cal-confirm");
@@ -379,10 +824,10 @@ class HolmMyMenuCard extends HTMLElement {
       confirmBtn.disabled = true;
       try {
         const result = await this._ws("calendar/export", { ...request, confirm_delete });
-        this._toast(`Calendrier : ${result.created} créé(s), ${result.updated} modifié(s), ${result.deleted} supprimé(s), ${result.unchanged} inchangé(s)`);
+        this._toast(_("Calendrier : {c} créé(s), {u} modifié(s), {d} supprimé(s), {n} inchangé(s)", { c: result.created, u: result.updated, d: result.deleted, n: result.unchanged }));
         this._close();
       } catch (e) {
-        this._toast(`Export calendrier : ${e.message || e}`);
+        this._toast(`${_("Export calendrier :")} ${e.message || e}`);
         btn.disabled = false;
         confirmBtn.disabled = false;
       }
@@ -396,13 +841,13 @@ class HolmMyMenuCard extends HTMLElement {
     mb.querySelector('[data-x="create"]').addEventListener("click", async () => {
       const target = mb.querySelector(".cal-target").value;
       const pfx = mb.querySelector(".cal-prefix").value;
-      if (!target) { this._toast("Sélectionne un calendrier"); return; }
+      if (!target) { this._toast(_("Sélectionne un calendrier")); return; }
       save("holm-mymenu-calendar-target", target);
       save("holm-mymenu-calendar-prefix", pfx);
       const mode = mb.querySelector(".cal-mode").value;
       request = { entity_id: target, start, end, prefix: pfx, mode };
       if (mode === "sync") {
-        mb.querySelector(".cal-confirm-target").textContent = `Calendrier : ${calendars.find(c => c.entity_id === target)?.attributes?.friendly_name || target}`;
+        mb.querySelector(".cal-confirm-target").textContent = `${_("Calendrier :")} ${calendars.find(c => c.entity_id === target)?.attributes?.friendly_name || target}`;
         confirmPanel.style.display = "block";
         actionRow.style.display = "none";
         return;
@@ -413,44 +858,44 @@ class HolmMyMenuCard extends HTMLElement {
 
   // ---------------- Recettes ----------------
   _recipesView() {
-    return `<div class="bar"><input class="search" data-k="recipes" placeholder="Rechercher une recette ou un ingrédient…" value="${esc(this._q.recipes)}">
-        <button class="ib ${this._favOnly ? "on" : ""}" data-act="fav-filter" title="Favoris"><ha-icon icon="mdi:heart${this._favOnly ? "" : "-outline"}"></ha-icon></button>
-        <button class="pill main" data-act="add-recipe"><ha-icon icon="mdi:plus"></ha-icon>Ajouter</button></div>
+    return `<div class="bar"><input class="search" data-k="recipes" placeholder="${_("Rechercher une recette ou un ingrédient…")}" value="${esc(this._q.recipes)}">
+        <button class="ib ${this._favOnly ? "on" : ""}" data-act="fav-filter" title="${_("Favoris")}"><ha-icon icon="mdi:heart${this._favOnly ? "" : "-outline"}"></ha-icon></button>
+        <button class="pill main" data-act="add-recipe"><ha-icon icon="mdi:plus"></ha-icon>${_("Ajouter")}</button></div>
       <div class="lst">${this._recipesList()}</div>`;
   }
   _recipesList() {
     const s = this._s, q = norm(this._q.recipes);
     let list = Object.values(s.recipes).filter((r) => !q || norm(r.name).includes(q) || (r.ingredients || []).some((l) => norm(l.name).includes(q)));
     if (this._favOnly) list = list.filter((r) => r.favorite);
-    list.sort((a, b) => (b.favorite - a.favorite) || a.name.localeCompare(b.name, "fr"));
+    list.sort((a, b) => (b.favorite - a.favorite) || a.name.localeCompare(b.name, LANG));
     const total = list.length, more = total - this._lim.recipes;
     list = list.slice(0, this._lim.recipes);
     return `${list.length ? `<div class="rgrid">${list.map((r) => `<div class="rc" data-act="recipe" data-id="${r.id}">
           <div class="ri" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}>${r.image ? "" : `<ha-icon icon="mdi:chef-hat"></ha-icon>`}${r.favorite ? `<i class="fav"><ha-icon icon="mdi:heart"></ha-icon></i>` : ""}</div>
           <div class="rn">${esc(r.name)}</div>
-          <div class="rm">${r.total ? `<span><ha-icon icon="mdi:clock-outline"></ha-icon>${mins(r.total)}</span>` : ""}<span><ha-icon icon="mdi:account-multiple-outline"></ha-icon>${r.servings}</span>${r.rating ? `<span><ha-icon icon="mdi:star"></ha-icon>${fq(r.rating)}</span>` : ""}</div></div>`).join("")}</div>${this._moreHtml(more, total, "recette")}`
-      : `<div class="empty">${q ? "Aucune recette ne correspond." : "Aucune recette pour l'instant : ajoutez-en depuis Marmiton, Jow, un lien, Mealie ou à la main."}</div>`}`;
+          <div class="rm">${r.total ? `<span><ha-icon icon="mdi:clock-outline"></ha-icon>${mins(r.total)}</span>` : ""}<span><ha-icon icon="mdi:account-multiple-outline"></ha-icon>${r.servings}</span>${r.rating ? `<span><ha-icon icon="mdi:star"></ha-icon>${fq(r.rating)}</span>` : ""}</div></div>`).join("")}</div>${this._moreHtml(more, total)}`
+      : `<div class="empty">${q ? _("Aucune recette ne correspond.") : _("Aucune recette pour l'instant : ajoutez-en depuis Marmiton, Jow, un lien, Mealie ou à la main.")}</div>`}`;
   }
 
   // ---------------- Ingrédients ----------------
   _ingView() {
-    return `<div class="bar"><input class="search" data-k="ingredients" placeholder="Rechercher un ingrédient…" value="${esc(this._q.ingredients)}">
-        <button class="pill main" data-act="add-ing"><ha-icon icon="mdi:plus"></ha-icon>Ajouter</button></div>
+    return `<div class="bar"><input class="search" data-k="ingredients" placeholder="${_("Rechercher un ingrédient…")}" value="${esc(this._q.ingredients)}">
+        <button class="pill main" data-act="add-ing"><ha-icon icon="mdi:plus"></ha-icon>${_("Ajouter")}</button></div>
       <div class="lst">${this._ingList()}</div>`;
   }
   _ingList() {
     const s = this._s, q = norm(this._q.ingredients);
     const all = Object.values(s.ingredients).filter((i) => !q || norm(i.name).includes(q))
-      .sort((a, b) => (s.aisles.findIndex((x) => x[0] === (a.aisle || "autre")) - s.aisles.findIndex((x) => x[0] === (b.aisle || "autre"))) || a.name.localeCompare(b.name, "fr"));
+      .sort((a, b) => (s.aisles.findIndex((x) => x[0] === (a.aisle || "autre")) - s.aisles.findIndex((x) => x[0] === (b.aisle || "autre"))) || a.name.localeCompare(b.name, LANG));
     const list = all.slice(0, this._lim.ingredients), more = all.length - list.length;
     const used = {};
     Object.values(s.recipes).forEach((r) => (r.ingredients || []).forEach((l) => { if (l.ingredient_id) used[l.ingredient_id] = (used[l.ingredient_id] || 0) + 1; }));
     const groups = s.aisles.map(([k, l]) => [k, l, list.filter((i) => (i.aisle || "autre") === k)]).filter((g) => g[2].length);
-    return `${groups.length ? groups.map(([k, l, items]) => `<div class="grp"><div class="gh">${esc(l)}<em>${items.length}</em></div><div class="igrid">
+    return `${groups.length ? groups.map(([k, l, items]) => `<div class="grp"><div class="gh">${esc(_(l))}<em>${items.length}</em></div><div class="igrid">
           ${items.map((i) => `<div class="ic" data-act="ing" data-id="${i.id}"><div class="ii" ${i.image ? `style="background-image:url('${esc(i.image)}')"` : ""}>${i.image ? "" : esc(i.name.slice(0, 1))}</div>
-            <div class="in"><b>${esc(i.name)}</b><small>${esc(i.brand || "")}${used[i.id] ? `${i.brand ? " · " : ""}${used[i.id]} recette${used[i.id] > 1 ? "s" : ""}` : ""}</small></div>
-            ${i.nutriscore ? `<span class="ns" style="background:${NUTRI[i.nutriscore] || "#888"}">${i.nutriscore.toUpperCase()}</span>` : ""}</div>`).join("")}</div></div>`).join("") + this._moreHtml(more, all.length, "ingrédient")
-      : `<div class="empty">${q ? `Aucun ingrédient « ${esc(this._q.ingredients)} ». <button class="lnk" data-act="add-ing">Le chercher sur Open Food Facts</button>` : "Aucun ingrédient pour l'instant."}</div>`}`;
+            <div class="in"><b>${esc(i.name)}</b><small>${esc(i.brand || "")}${used[i.id] ? `${i.brand ? " · " : ""}${_(used[i.id] > 1 ? _("{n} recettes") : _("{n} recette"), { n: used[i.id] })}` : ""}</small></div>
+            ${i.nutriscore ? `<span class="ns" style="background:${NUTRI[i.nutriscore] || "#888"}">${i.nutriscore.toUpperCase()}</span>` : ""}</div>`).join("")}</div></div>`).join("") + this._moreHtml(more, all.length)
+      : `<div class="empty">${q ? `${_("Aucun ingrédient « {q} ».", { q: esc(this._q.ingredients) })} <button class="lnk" data-act="add-ing">${_("Le chercher sur Open Food Facts")}</button>` : _("Aucun ingrédient pour l'instant.")}</div>`}`;
   }
 
   // ---------------- Statistiques ----------------
@@ -463,37 +908,37 @@ class HolmMyMenuCard extends HTMLElement {
   _statsView() {
     const st = this._stats;
     if (!st || Date.now() - (this._statsAt || 0) > 60000) this._loadStats();
-    if (!st) return `<div class="empty">Calcul des statistiques…</div>`;
+    if (!st) return `<div class="empty">${_("Calcul des statistiques…")}</div>`;
     if (st.error) return `<div class="empty">${esc(st.error)}</div>`;
-    const size = (b) => b >= 1048576 ? `${fq(Math.round(b / 104857.6) / 10)} Mo` : `${Math.max(1, Math.round(b / 1024))} Ko`;
-    const SRC = { marmiton: "Marmiton", jow: "Jow", revisitee: "Revisitée", mealie: "Mealie", web: "Lien", manual: "À la main", manuel: "À la main" };
+    const size = (b) => b >= 1048576 ? `${fq(Math.round(b / 104857.6) / 10)} ${_("Mo")}` : `${Math.max(1, Math.round(b / 1024))} ${_("Ko")}`;
+    const SRC = { marmiton: "Marmiton", jow: "Jow", revisitee: _("Revisitée"), mealie: "Mealie", web: _("Lien"), manual: _("À la main"), manuel: _("À la main") };
     const tile = (icon, n, label, sub = "") => `<div class="stile"><ha-icon icon="${icon}"></ha-icon><b>${n}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ""}</div>`;
     const wmax = Math.max(1, ...st.weeks.map((w) => w.meals));
     const thisMon = iso(monday(new Date()));
     const tmax = Math.max(1, ...st.top_recipes.map((r) => r.count));
     const imax = Math.max(1, ...st.top_ingredients.map((r) => r.count));
     const srcs = Object.entries(st.sources).sort((a, b) => b[1] - a[1]);
-    return `<div class="bar"><div class="wk">Votre base HOLM My Menu</div><button class="ib" data-act="stats-refresh" title="Actualiser"><ha-icon icon="mdi:refresh"></ha-icon></button></div>
+    return `<div class="bar"><div class="wk">${_("Votre base HOLM My Menu")}</div><button class="ib" data-act="stats-refresh" title="${_("Actualiser")}"><ha-icon icon="mdi:refresh"></ha-icon></button></div>
       <div class="stiles">
-        ${tile("mdi:book-open-page-variant", st.recipes, "recettes", `${st.favorites} favori${st.favorites > 1 ? "s" : ""} · ${st.never_planned} jamais planifiée${st.never_planned > 1 ? "s" : ""}`)}
-        ${tile("mdi:food-apple", st.ingredients, "ingrédients", `${st.ingredients_off} avec fiche produit · ${st.ingredients_img} avec photo`)}
-        ${tile("mdi:calendar-check", st.meals_planned, "repas planifiés", "sur les 8 dernières semaines et à venir")}
-        ${tile("mdi:database", size(st.db_bytes + st.img_bytes), "occupés", `base ${size(st.db_bytes)} · ${st.img_files} photos ${size(st.img_bytes)}`)}
+        ${tile("mdi:book-open-page-variant", st.recipes, _("recettes"), _(st.favorites > 1 ? _("{n} favoris") : _("{n} favori"), { n: st.favorites }) + " · " + _(st.never_planned > 1 ? _("{n} jamais planifiées") : _("{n} jamais planifiée"), { n: st.never_planned }))}
+        ${tile("mdi:food-apple", st.ingredients, _("ingrédients"), _("{a} avec fiche produit · {b} avec photo", { a: st.ingredients_off, b: st.ingredients_img }))}
+        ${tile("mdi:calendar-check", st.meals_planned, _("repas planifiés"), _("sur les 8 dernières semaines et à venir"))}
+        ${tile("mdi:database", size(st.db_bytes + st.img_bytes), _("occupés"), _("base {a} · {n} photos {b}", { a: size(st.db_bytes), n: st.img_files, b: size(st.img_bytes) }))}
       </div>
       <div class="scols">
-        <div class="sbox"><div class="sh">Recettes les plus planifiées</div>
-          ${st.top_recipes.length ? `<div class="toplist">${st.top_recipes.map((r, k) => `<div class="tr" data-act="recipe" data-id="${r.id}" title="Dernière fois : ${r.last ? fdate(new Date(r.last + "T00:00"), { day: "numeric", month: "long" }) : "—"}">
+        <div class="sbox"><div class="sh">${_("Recettes les plus planifiées")}</div>
+          ${st.top_recipes.length ? `<div class="toplist">${st.top_recipes.map((r, k) => `<div class="tr" data-act="recipe" data-id="${r.id}" title="${_("Dernière fois : {d}", { d: r.last ? fdate(new Date(r.last + "T00:00"), { day: "numeric", month: "long" }) : "—" })}">
               <span class="rk">${k + 1}</span><span class="ti" ${r.image ? `style="background-image:url('${esc(r.image)}');background-size:cover"` : ""}></span>
               <span class="tn2"><b>${esc(r.name)}</b><span class="tbar"><i style="width:${Math.round((r.count / tmax) * 100)}%"></i></span></span><em>${r.count}×</em></div>`).join("")}</div>`
-            : `<div class="muted pad">Planifiez des repas : les recettes les plus cuisinées apparaîtront ici.</div>`}</div>
-        <div class="sbox"><div class="sh">Repas planifiés par semaine</div>
-          <div class="wbars" role="img" aria-label="Repas planifiés par semaine">${st.weeks.map((w) => { const d = new Date(w.start + "T00:00"); return `<div class="wb ${w.start === thisMon ? "now" : ""}" title="Semaine du ${fdate(d, { day: "numeric", month: "long" })} : ${w.meals} repas">
+            : `<div class="muted pad">${_("Planifiez des repas : les recettes les plus cuisinées apparaîtront ici.")}</div>`}</div>
+        <div class="sbox"><div class="sh">${_("Repas planifiés par semaine")}</div>
+          <div class="wbars" role="img" aria-label="${_("Repas planifiés par semaine")}">${st.weeks.map((w) => { const d = new Date(w.start + "T00:00"); return `<div class="wb ${w.start === thisMon ? "now" : ""}" title="${_("Semaine du {d} : {n} repas", { d: fdate(d, { day: "numeric", month: "long" }), n: w.meals })}">
               <span class="wv">${w.meals || ""}</span><span class="wcol"><i style="height:${Math.round((w.meals / wmax) * 100)}%"></i></span><span class="wl">${d.getDate()}/${d.getMonth() + 1}</span></div>`; }).join("")}</div>
-          <div class="sh">Ingrédients les plus utilisés</div>
+          <div class="sh">${_("Ingrédients les plus utilisés")}</div>
           ${st.top_ingredients.length ? `<div class="toplist sm">${st.top_ingredients.slice(0, 10).map((r) => `<div class="tr" data-act="ing" data-id="${r.id}">
               <span class="ti ${r.image ? "" : "no"}" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}>${r.image ? "" : `<ha-icon icon="mdi:food-apple-outline"></ha-icon>`}</span>
               <span class="tn2"><b>${esc(r.name)}</b><span class="tbar"><i style="width:${Math.round((r.count / imax) * 100)}%"></i></span></span><em>${r.count}</em></div>`).join("")}</div>` : `<div class="muted pad">—</div>`}
-          <div class="sh">Origine des recettes</div>
+          <div class="sh">${_("Origine des recettes")}</div>
           <div class="srcs">${srcs.map(([k, n]) => `<span class="chip">${esc(SRC[k] || k)} <b>${n}</b></span>`).join("") || "—"}</div>
         </div>
       </div>`;
@@ -506,9 +951,9 @@ class HolmMyMenuCard extends HTMLElement {
   // n'effacent ni les réglages ni les messages de courses Telegram.
   _remindersView() {
     const list = this._s.reminders || [];
-    return `<div class="bar"><h3 style="flex:1;margin:0">🔔 Mes rappels</h3><button class="pill main" data-act="reminder-add"><ha-icon icon="mdi:plus"></ha-icon>Nouveau rappel</button></div>
-      <div class="muted" style="margin:8px 0 14px">Rappels ponctuels ou récurrents · Heure locale Home Assistant · Notifications Telegram et mobiles</div>
-      ${list.length ? list.map(r=>`<div class="rem-row"><div class="rem-text"><b>${({shopping:"🛒",planning:"📅",recipe:"🍳",custom:"🔔"})[r.kind]||"🔔"} ${esc(r.title)}</b><small>${esc(r.frequency==="weekly"?"Hebdomadaire":r.frequency==="daily"?"Quotidien":"Une fois")} · ${esc(r.time)}${r.frequency==="once"?" · "+esc(r.date):""} · ${r.enabled?"Actif":"En pause"}</small><small>${esc(r.last_status||"Aucun envoi")}</small></div><div class="rem-actions"><button class="ib" data-act="reminder-toggle" data-id="${r.id}" title="Activer ou suspendre"><ha-icon icon="mdi:${r.enabled?"bell-ring":"bell-off"}"></ha-icon></button><button class="ib" data-act="reminder-test" data-id="${r.id}" title="Tester"><ha-icon icon="mdi:send-check"></ha-icon></button><button class="ib" data-act="reminder-edit" data-id="${r.id}" title="Modifier"><ha-icon icon="mdi:pencil"></ha-icon></button><button class="ib" data-act="reminder-delete" data-id="${r.id}" title="Supprimer"><ha-icon icon="mdi:delete-outline"></ha-icon></button></div></div>`).join("") : `<div class="empty">Aucun rappel. Créez votre premier rappel pour les courses, les menus, les recettes ou une tâche personnalisée.</div>`}`;
+    return `<div class="bar"><h3 style="flex:1;margin:0">${_("🔔 Mes rappels")}</h3><button class="pill main" data-act="reminder-add"><ha-icon icon="mdi:plus"></ha-icon>${_("Nouveau rappel")}</button></div>
+      <div class="muted" style="margin:8px 0 14px">${_("Rappels ponctuels ou récurrents · Heure locale Home Assistant · Notifications Telegram et mobiles")}</div>
+      ${list.length ? list.map(r=>`<div class="rem-row"><div class="rem-text"><b>${({shopping:"🛒",planning:"📅",recipe:"🍳",custom:"🔔"})[r.kind]||"🔔"} ${esc(r.title)}</b><small>${esc(r.frequency==="weekly"?_("Hebdomadaire"):r.frequency==="daily"?_("Quotidien"):_("Une fois"))} · ${esc(r.time)}${r.frequency==="once"?" · "+esc(r.date):""} · ${r.enabled?_("Actif"):_("En pause")}</small><small>${esc(r.last_status||_("Aucun envoi"))}</small></div><div class="rem-actions"><button class="ib" data-act="reminder-toggle" data-id="${r.id}" title="${_("Activer ou suspendre")}"><ha-icon icon="mdi:${r.enabled?"bell-ring":"bell-off"}"></ha-icon></button><button class="ib" data-act="reminder-test" data-id="${r.id}" title="${_("Tester")}"><ha-icon icon="mdi:send-check"></ha-icon></button><button class="ib" data-act="reminder-edit" data-id="${r.id}" title="${_("Modifier")}"><ha-icon icon="mdi:pencil"></ha-icon></button><button class="ib" data-act="reminder-delete" data-id="${r.id}" title="${_("Supprimer")}"><ha-icon icon="mdi:delete-outline"></ha-icon></button></div></div>`).join("") : `<div class="empty">${_("Aucun rappel. Créez votre premier rappel pour les courses, les menus, les recettes ou une tâche personnalisée.")}</div>`}`;
   }
   // Formulaire de rappel : protéger les champs contre les rerenders Lovelace
   // et empêcher qu'un clic sur le fond ne ferme une saisie non enregistrée.
@@ -516,35 +961,35 @@ class HolmMyMenuCard extends HTMLElement {
   _reminderModal(id=null) {
     const r=(this._s.reminders||[]).find(x=>x.id===id)||{};
     const input=(label,key,type="text",value="")=>`<label class="rem-field">${label}<input class="f" data-key="${key}" type="${type}" value="${esc(String(r[key]??value))}"></label>`;
-    const devices=Object.keys(this._hass.states).filter(e=>e.startsWith("notify.") && ((this._hass.entities||{})[e]||{}).platform!=="smtp").map(e=>[e,this._hass.states[e].attributes.friendly_name||e]).sort((a,b)=>a[1].localeCompare(b[1],"fr"));
+    const devices=Object.keys(this._hass.states).filter(e=>e.startsWith("notify.") && ((this._hass.entities||{})[e]||{}).platform!=="smtp").map(e=>[e,this._hass.states[e].attributes.friendly_name||e]).sort((a,b)=>a[1].localeCompare(b[1], LANG));
     const selectedDevices=new Set(r.notify_entities|| (r.notify_service?[r.notify_service]:[]));
     const contacts=(this._s.contacts||[]).filter(c=>c.email);
     const selectedEmails=new Set(r.emails||[]);
     const savedTargets=load("holm-mymenu-telegram-targets-v2",[]);
     const tgKey=t=>String(t.chat_id)+":"+String(t.thread_id||"");
     const selectedTargets=new Set((r.telegram_targets||[]).map(tgKey));
-    const mb=this._modal(id?"Modifier le rappel":"Nouveau rappel",`<div class="rem-form">
-      ${input("Titre", "title", "text", "Courses de la semaine")}
-      <label class="rem-field">Type<select class="f" data-key="kind">${[["shopping","🛒 Courses"],["planning","📅 Menus incomplets"],["recipe","🍳 Préparation / recette"],["custom","🔔 Personnalisé"]].map(([v,l])=>`<option value="${v}" ${r.kind===v?"selected":""}>${l}</option>`).join("")}</select></label>
+    const mb=this._modal(id?_("Modifier le rappel"):_("Nouveau rappel"),`<div class="rem-form">
+      ${input(_("Titre"), "title", "text", _("Courses de la semaine"))}
+      <label class="rem-field">${_("Type")}<select class="f" data-key="kind">${[["shopping",_("🛒 Courses")],["planning",_("📅 Menus incomplets")],["recipe",_("🍳 Préparation / recette")],["custom",_("🔔 Personnalisé")]].map(([v,l])=>`<option value="${v}" ${r.kind===v?"selected":""}>${l}</option>`).join("")}</select></label>
       <div class="rem-kind-help muted small2" role="status" aria-live="polite"></div>
-      <label class="rem-field">Fréquence<select class="f" data-key="frequency">${[["once","Une fois"],["daily","Chaque jour"],["weekly","Chaque semaine"]].map(([v,l])=>`<option value="${v}" ${r.frequency===v||(!r.frequency&&v==="weekly")?"selected":""}>${l}</option>`).join("")}</select></label>
-      ${input("Heure", "time", "time", "18:00")}
-      <div data-frequency="once">${input("Date du rappel", "date", "date", iso(new Date()))}</div>
-      <div data-frequency="weekly"><label class="rem-field">Jours de rappel<div class="rem-days">${["L","M","M","J","V","S","D"].map((d,i)=>`<label><input type="checkbox" data-day="${i}" ${(r.days||[4]).includes(i)?"checked":""}>${d}</label>`).join("")}</div></label></div>
-      <div data-kind="recipe custom"><label class="rem-field">Message / consigne<textarea class="f" data-key="message" rows="3">${esc(r.message||"")}</textarea></label></div>
-      <div class="sh">📱 Notifications mobiles Home Assistant</div>
-      <div class="muted small2">Envoie une notification push aux téléphones ou tablettes sélectionnés. Les appareils sont repris des entités de notification Home Assistant.</div>
-      ${devices.length?`<div class="dlist">${devices.map(([e,n])=>`<label class="chip"><input type="checkbox" data-notify="${esc(e)}" ${selectedDevices.has(e)?"checked":""}>${esc(n)}</label>`).join("")}</div>`:`<div class="muted">Aucune entité notify disponible.</div>`}
+      <label class="rem-field">${_("Fréquence")}<select class="f" data-key="frequency">${[["once",_("Une fois")],["daily",_("Chaque jour")],["weekly",_("Chaque semaine")]].map(([v,l])=>`<option value="${v}" ${r.frequency===v||(!r.frequency&&v==="weekly")?"selected":""}>${l}</option>`).join("")}</select></label>
+      ${input(_("Heure"), "time", "time", "18:00")}
+      <div data-frequency="once">${input(_("Date du rappel"), "date", "date", iso(new Date()))}</div>
+      <div data-frequency="weekly"><label class="rem-field">${_("Jours de rappel")}<div class="rem-days">${[0,1,2,3,4,5,6].map((i)=>new Date(2024,0,1+i).toLocaleDateString(NUMLOC,{weekday:"narrow"})).map((d,i)=>`<label><input type="checkbox" data-day="${i}" ${(r.days||[4]).includes(i)?"checked":""}>${d}</label>`).join("")}</div></label></div>
+      <div data-kind="recipe custom"><label class="rem-field">${_("Message / consigne")}<textarea class="f" data-key="message" rows="3">${esc(r.message||"")}</textarea></label></div>
+      <div class="sh">${_("📱 Notifications mobiles Home Assistant")}</div>
+      <div class="muted small2">${_("Envoie une notification push aux téléphones ou tablettes sélectionnés. Les appareils sont repris des entités de notification Home Assistant.")}</div>
+      ${devices.length?`<div class="dlist">${devices.map(([e,n])=>`<label class="chip"><input type="checkbox" data-notify="${esc(e)}" ${selectedDevices.has(e)?"checked":""}>${esc(n)}</label>`).join("")}</div>`:`<div class="muted">${_("Aucune entité notify disponible.")}</div>`}
       <div class="sh">✈️ Telegram</div>
-      <div class="muted small2">Envoie un message de rappel dans les conversations ou sujets déjà configurés pour la liste de courses. Il ne remplace pas le message interactif des courses.</div>
-      ${savedTargets.length?`<div class="clist">${savedTargets.map((t,i)=>`<label class="ct"><input type="checkbox" data-telegram="${i}" ${selectedTargets.has(tgKey(t))?"checked":""}><span class="cn">Conversation ${esc(t.chat_id)}${t.thread_id?` · Sujet ${esc(t.thread_id)}`:""}</span></label>`).join("")}</div>`:`<div class="muted">Aucune conversation enregistrée. Configure d'abord Telegram dans « Envoyer la liste de courses ».</div>`}
+      <div class="muted small2">${_("Envoie un message de rappel dans les conversations ou sujets déjà configurés pour la liste de courses. Il ne remplace pas le message interactif des courses.")}</div>
+      ${savedTargets.length?`<div class="clist">${savedTargets.map((t,i)=>`<label class="ct"><input type="checkbox" data-telegram="${i}" ${selectedTargets.has(tgKey(t))?"checked":""}><span class="cn">${_("Conversation")} ${esc(t.chat_id)}${t.thread_id?` · ${_("Sujet")} ${esc(t.thread_id)}`:""}</span></label>`).join("")}</div>`:`<div class="muted">${_("Aucune conversation enregistrée. Configure d'abord Telegram dans « Envoyer la liste de courses ».")}</div>`}
       <div class="sh">✉️ E-mail</div>
-      <div class="muted small2">Envoie le rappel par e-mail avec le serveur SMTP configuré dans Home Assistant. Sélectionne des contacts du carnet ou saisis d'autres adresses.</div>
+      <div class="muted small2">${_("Envoie le rappel par e-mail avec le serveur SMTP configuré dans Home Assistant. Sélectionne des contacts du carnet ou saisis d'autres adresses.")}</div>
       ${contacts.length?`<div class="clist">${contacts.map(c=>`<label class="ct"><input type="checkbox" data-email="${esc(c.email)}" ${selectedEmails.has(c.email)?"checked":""}><span class="cn">${esc(c.name)} · ${esc(c.email)}</span></label>`).join("")}</div>`:""}
-      <label class="rem-field">Autres adresses e-mail (une par ligne)<textarea class="f" data-key="emails" rows="2" placeholder="exemple@domaine.fr">${esc((r.emails||[]).filter(e=>!contacts.some(c=>c.email===e)).join("\n"))}</textarea></label>
-      <div data-kind="shopping planning"><label><input type="checkbox" data-key="only_if_needed" ${r.only_if_needed!==false?"checked":""}> Envoyer uniquement si nécessaire</label><div class="muted small2">Courses : uniquement s'il reste des articles. Menus : uniquement si des repas ne sont pas planifiés.</div></div>
-      <label><input type="checkbox" data-key="enabled" ${r.enabled!==false?"checked":""}> Rappel actif</label>
-      <div class="bar" style="justify-content:flex-end"><button class="pill" data-cancel>Annuler</button><button class="pill main" data-save>Enregistrer</button></div>
+      <label class="rem-field">${_("Autres adresses e-mail (une par ligne)")}<textarea class="f" data-key="emails" rows="2" placeholder="exemple@domaine.fr">${esc((r.emails||[]).filter(e=>!contacts.some(c=>c.email===e)).join("\n"))}</textarea></label>
+      <div data-kind="shopping planning"><label><input type="checkbox" data-key="only_if_needed" ${r.only_if_needed!==false?"checked":""}> ${_("Envoyer uniquement si nécessaire")}</label><div class="muted small2">${_("Courses : uniquement s'il reste des articles. Menus : uniquement si des repas ne sont pas planifiés.")}</div></div>
+      <label><input type="checkbox" data-key="enabled" ${r.enabled!==false?"checked":""}> ${_("Rappel actif")}</label>
+      <div class="bar" style="justify-content:flex-end"><button class="pill" data-cancel>${_("Annuler")}</button><button class="pill main" data-save>${_("Enregistrer")}</button></div>
       </div>`, {dismissOnBackdrop:false});
     // Empêche le rafraîchissement de la carte de détruire le formulaire ouvert.
     // Le clic sur le fond est désactivé via dismissOnBackdrop:false dans _modal.
@@ -556,10 +1001,10 @@ class HolmMyMenuCard extends HTMLElement {
       reminderDialog.addEventListener(eventName, stopPropagation);
     }
     const kindHelp = {
-      shopping: "🛒 Courses : vérifie les articles restant à acheter. Avec « Envoyer uniquement si nécessaire », aucun rappel n'est envoyé si la liste est terminée.",
-      planning: "📅 Menus : vérifie les repas non planifiés sur les sept prochains jours. Avec « Envoyer uniquement si nécessaire », aucun rappel n'est envoyé si tous les menus sont complets.",
-      recipe: "🍳 Préparation : envoie la consigne saisie ci-dessous au moment choisi (par exemple « Décongeler le poulet »). Le délai n'est pas calculé automatiquement depuis la recette.",
-      custom: "🔔 Personnalisé : envoie le texte saisi ci-dessous à l'heure programmée (par exemple « Acheter les pommes de terre à la ferme »), indépendamment des courses et des menus."
+      shopping: _("🛒 Courses : vérifie les articles restant à acheter. Avec « Envoyer uniquement si nécessaire », aucun rappel n'est envoyé si la liste est terminée."),
+      planning: _("📅 Menus : vérifie les repas non planifiés sur les sept prochains jours. Avec « Envoyer uniquement si nécessaire », aucun rappel n'est envoyé si tous les menus sont complets."),
+      recipe: _("🍳 Préparation : envoie la consigne saisie ci-dessous au moment choisi (par exemple « Décongeler le poulet »). Le délai n'est pas calculé automatiquement depuis la recette."),
+      custom: _("🔔 Personnalisé : envoie le texte saisi ci-dessous à l'heure programmée (par exemple « Acheter les pommes de terre à la ferme »), indépendamment des courses et des menus.")
     };
     // Affiche uniquement les champs pertinents selon le type et la fréquence.
     // L'aide est contextuelle : elle explique les quatre types de rappels.
@@ -584,7 +1029,7 @@ class HolmMyMenuCard extends HTMLElement {
       const notify_entities=[...mb.querySelectorAll('[data-notify]:checked')].map(x=>x.dataset.notify);
       const emails=[...new Set([...mb.querySelectorAll('[data-email]:checked')].map(x=>x.dataset.email).concat(v("emails").split(/[\n,;]/).map(x=>x.trim()).filter(Boolean)))];
       const reminder={title:v("title"),kind:v("kind"),frequency:v("frequency"),time:v("time"),date:v("date"),days:[...mb.querySelectorAll('[data-day]:checked')].map(x=>Number(x.dataset.day)),message:v("message"),notify_service:"",notify_entities,emails,telegram_targets,only_if_needed:mb.querySelector('[data-key="only_if_needed"]').checked,enabled:mb.querySelector('[data-key="enabled"]').checked};
-      try {await this._ws("reminder/save",{reminder,...(id?{reminder_id:id}:{})});this._close();this._toast("Rappel enregistré");}catch(e){this._toast(e.message||String(e));}
+      try {await this._ws("reminder/save",{reminder,...(id?{reminder_id:id}:{})});this._close();this._toast(_("Rappel enregistré"));}catch(e){this._toast(e.message||String(e));}
     };
   }
 
@@ -604,54 +1049,53 @@ class HolmMyMenuCard extends HTMLElement {
     const viewItems = sh.groups || items;
     const groups = s.aisles.map(([k, l]) => [l, viewItems.filter((i) => (i.aisle || "autre") === k)]).filter((g) => g[1].length);
     const done = items.filter((i) => i.checked).length;
-    const lab = sh.range ? shopRange(sh.range.start, sh.range.end) : "";
-    const rng = !lab ? "" : lab.startsWith("semaine") ? `Générée pour la ${lab}` : lab.startsWith("le ") ? `Générée pour ${lab}` : `Générée ${lab}`;
-    const seg = `<span class="seg mini shopmode">${[["week", "Semaine"], ["dates", "Dates"]].map(([k, l]) => `<button class="${(dates ? "dates" : "week") === k ? "on" : ""}" data-act="shop-mode" data-m="${k}">${l}</button>`).join("")}</span>`;
+    const rng = sh.range ? shopRange(sh.range.start, sh.range.end, false, true) : "";
+    const seg = `<span class="seg mini shopmode">${[["week", _("Semaine")], ["dates", _("Dates")]].map(([k, l]) => `<button class="${(dates ? "dates" : "week") === k ? "on" : ""}" data-act="shop-mode" data-m="${k}">${l}</button>`).join("")}</span>`;
     const picker = dates
-      ? `<div class="wk dates"><label>Du <input type="date" class="f dt" data-act="shop-from" data-ev="change" value="${iso(df)}"></label>
-          <label>au <input type="date" class="f dt" data-act="shop-to" data-ev="change" value="${iso(dt)}" min="${iso(df)}" max="${iso(addDays(df, SHOP_MAX_DAYS - 1))}"></label>
-          <small class="${ndays < 1 || ndays > SHOP_MAX_DAYS ? "bad" : ""}">${ndays < 1 ? "dates inversées" : ndays + " jour" + (ndays > 1 ? "s" : "")}</small></div>`
+      ? `<div class="wk dates"><label>${_("Du")} <input type="date" class="f dt" data-act="shop-from" data-ev="change" value="${iso(df)}"></label>
+          <label>${_("au")} <input type="date" class="f dt" data-act="shop-to" data-ev="change" value="${iso(dt)}" min="${iso(df)}" max="${iso(addDays(df, SHOP_MAX_DAYS - 1))}"></label>
+          <small class="${ndays < 1 || ndays > SHOP_MAX_DAYS ? "bad" : ""}">${ndays < 1 ? _("dates inversées") : _(ndays > 1 ? _("{n} jours") : _("{n} jour"), { n: ndays })}</small></div>`
       : `<button class="ib" data-act="shop-week-prev"><ha-icon icon="mdi:chevron-left"></ha-icon></button>
-        <div class="wk">Semaine du ${fdate(w0, { day: "numeric", month: "short" })} au ${fdate(w1, { day: "numeric", month: "short" })}</div>
+        <div class="wk">${_("Semaine du {a} au {b}", { a: fdate(w0, { day: "numeric", month: "short" }), b: fdate(w1, { day: "numeric", month: "short" }) })}</div>
         <button class="ib" data-act="shop-week-next"><ha-icon icon="mdi:chevron-right"></ha-icon></button>`;
     return `<div class="bar shopbar">${seg}${picker}
-        <button class="pill main" data-act="shop-gen"><ha-icon icon="mdi:cart-arrow-down"></ha-icon>Générer</button></div>
-      <div class="bar"><input class="shop-add" placeholder="Ajouter un article (Entrée)…"><button class="pill" data-act="shop-category"><ha-icon icon="mdi:shape-plus"></ha-icon>Rayons</button>${(sh.excluded || []).length ? `<button class="pill" data-act="shop-restore" title="Voir et restaurer les articles retirés">Articles retirés (${sh.excluded.length})</button>` : ""}</div>
-      ${items.length ? `<div class="shopmeta">${rng}${rng ? " · " : ""}${done}/${items.length} pris
-          ${done ? `<button class="lnk" data-act="shop-clear-checked">Retirer les articles pris</button>` : ""}</div>
-        <div class="row act shopact"><button class="pill" data-act="shop-share"><ha-icon icon="mdi:send-outline"></ha-icon>Envoyer (mail / Telegram)</button><button class="pill" data-act="shop-copy"><ha-icon icon="mdi:content-copy"></ha-icon>Copier</button><button class="pill danger" data-act="shop-clear"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Vider la liste</button></div>
-        ${groups.map(([l, its]) => `<div class="grp"><div class="gh">${esc(l)}<em>${its.filter((i) => !i.checked).length}</em></div>
-          ${its.sort((a, b) => a.checked - b.checked || a.name.localeCompare(b.name, "fr")).map((i) => `<div class="si ${i.checked ? "ck" : ""}" data-act="shop-toggle-group" data-ids='${JSON.stringify(i.ids || [i.id])}' title="${esc((i.items || [i]).flatMap(x => x.sources || []).join(", "))}">
+        <button class="pill main" data-act="shop-gen"><ha-icon icon="mdi:cart-arrow-down"></ha-icon>${_("Générer")}</button></div>
+      <div class="bar"><input class="shop-add" placeholder="${_("Ajouter un article (Entrée)…")}"><button class="pill" data-act="shop-category"><ha-icon icon="mdi:shape-plus"></ha-icon>${_("Rayons")}</button>${(sh.excluded || []).length ? `<button class="pill" data-act="shop-restore" title="${_("Voir et restaurer les articles retirés")}">${_("Articles retirés")} (${sh.excluded.length})</button>` : ""}</div>
+      ${items.length ? `<div class="shopmeta">${rng}${rng ? " · " : ""}${_("{d}/{n} pris", { d: done, n: items.length })}
+          ${done ? `<button class="lnk" data-act="shop-clear-checked">${_("Retirer les articles pris")}</button>` : ""}</div>
+        <div class="row act shopact"><button class="pill" data-act="shop-share"><ha-icon icon="mdi:send-outline"></ha-icon>${_("Envoyer (mail / Telegram)")}</button><button class="pill" data-act="shop-copy"><ha-icon icon="mdi:content-copy"></ha-icon>${_("Copier")}</button><button class="pill danger" data-act="shop-clear"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>${_("Vider la liste")}</button></div>
+        ${groups.map(([l, its]) => `<div class="grp"><div class="gh">${esc(_(l))}<em>${its.filter((i) => !i.checked).length}</em></div>
+          ${its.sort((a, b) => a.checked - b.checked || a.name.localeCompare(b.name, LANG)).map((i) => `<div class="si ${i.checked ? "ck" : ""}" data-act="shop-toggle-group" data-ids='${JSON.stringify(i.ids || [i.id])}' title="${esc((i.items || [i]).flatMap(x => x.sources || []).join(", "))}">
             <span class="cb"><ha-icon icon="mdi:check"></ha-icon></span><b>${esc(i.name)}</b><span class="q">${esc(i.display || "")}</span>
-            ${(i.items || [i]).some(x => x.sources?.length) ? `<small>${esc([...new Set((i.items || [i]).flatMap(x => x.sources || []))].slice(0, 2).join(", "))}</small>` : (i.items || [i]).some(x => x.manual) ? `<small>ajouté</small>` : "<small></small>"}
-            <button class="ib" data-act="shop-edit" data-ids='${JSON.stringify(i.ids || [i.id])}' title="Modifier"><ha-icon icon="mdi:pencil-outline"></ha-icon></button><button class="x" data-act="shop-del-group" data-ids='${JSON.stringify(i.ids || [i.id])}' ><ha-icon icon="mdi:close"></ha-icon></button></div>`).join("")}</div>`).join("")}`
-      : `<div class="empty">La liste est vide. Choisissez une semaine (ou des dates) et touchez <b>Générer</b> : les ingrédients des repas prévus sont additionnés et rangés par rayon.</div>`}`;
+            ${(i.items || [i]).some(x => x.sources?.length) ? `<small>${esc([...new Set((i.items || [i]).flatMap(x => x.sources || []))].slice(0, 2).join(", "))}</small>` : (i.items || [i]).some(x => x.manual) ? `<small>${_("ajouté")}</small>` : "<small></small>"}
+            <button class="ib" data-act="shop-edit" data-ids='${JSON.stringify(i.ids || [i.id])}' title="${_("Modifier")}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button><button class="x" data-act="shop-del-group" data-ids='${JSON.stringify(i.ids || [i.id])}' ><ha-icon icon="mdi:close"></ha-icon></button></div>`).join("")}</div>`).join("")}`
+      : `<div class="empty">${_("La liste est vide. Choisissez une semaine (ou des dates) et touchez <b>Générer</b> : les ingrédients des repas prévus sont additionnés et rangés par rayon.")}</div>`}`;
   }
 
   _restoreShopModal() {
     const sh = this._s.shopping || {};
     const excluded = sh.excluded || [];
     const details = sh.excluded_details || {};
-    const mb = this._modal("Articles retirés", `
-      <div class="muted">Ces articles ne seront pas ajoutés à nouveau lors de la génération de cette période. Les recettes restent inchangées.</div>
+    const mb = this._modal(_("Articles retirés"), `
+      <div class="muted">${_("Ces articles ne seront pas ajoutés à nouveau lors de la génération de cette période. Les recettes restent inchangées.")}</div>
       <div class="clist">${excluded.map(key => {
         const item = details[key] || {};
         const name = item.name || key.split("|")[0];
         return `<div class="ct" style="display:flex;align-items:center;gap:12px;padding:10px 12px">
           <span class="cn grow"><b>${esc(name)}</b>${item.display ? `<small>${esc(item.display)}</small>` : ""}</span>
-          <button class="pill" data-restore="${esc(key)}"><ha-icon icon="mdi:backup-restore"></ha-icon>Restaurer</button>
+          <button class="pill" data-restore="${esc(key)}"><ha-icon icon="mdi:backup-restore"></ha-icon>${_("Restaurer")}</button>
         </div>`;
       }).join("")}</div>
-      <div class="row end"><button class="pill" data-all>Tout restaurer</button><button class="pill main" data-close>Terminer</button></div>
-      <small>Les articles restaurés réapparaîtront à la prochaine génération de la liste.</small>`);
+      <div class="row end"><button class="pill" data-all>${_("Tout restaurer")}</button><button class="pill main" data-close>${_("Terminer")}</button></div>
+      <small>${_("Les articles restaurés réapparaîtront à la prochaine génération de la liste.")}</small>`);
     mb.querySelectorAll("[data-restore]").forEach(btn => btn.addEventListener("click", async () => {
       await this._ws("shopping/restore", {keys: [btn.dataset.restore]});
-      this._toast("Article réautorisé pour la prochaine génération");
+      this._toast(_("Article réautorisé pour la prochaine génération"));
       this._close();
     }));
     mb.querySelector("[data-all]").addEventListener("click", async () => {
       await this._ws("shopping/restore", {});
-      this._toast("Tous les articles sont réautorisés pour la prochaine génération");
+      this._toast(_("Tous les articles sont réautorisés pour la prochaine génération"));
       this._close();
     });
     mb.querySelector("[data-close]").addEventListener("click", () => this._close());
@@ -660,25 +1104,25 @@ class HolmMyMenuCard extends HTMLElement {
   // RAYONS : création et modification depuis les courses et les fiches ingrédients.
   _categoryModal(onCreated = null) {
     const s = this._s;
-    const mb = this._modal("Gérer les rayons", `
-      <div class="sh">Catégories personnalisées</div>
-      ${(s.custom_aisles || []).map(a => `<div class="row"><span class="grow">${esc(a.icon || "🟣")} ${esc(a.name)}</span><button class="pill" data-edit="${esc(a.id)}">Modifier</button><button class="pill danger" data-del="${esc(a.id)}">Supprimer</button></div>`).join("") || '<div class="muted">Aucune catégorie personnalisée.</div>'}
-      <div class="sh">Nouvelle catégorie</div>
-      <div class="row"><input class="f grow" data-newname placeholder="Ex. Bricolage"><input class="f" data-newicon value="🟣" maxlength="8" style="max-width:75px"><button class="pill main" data-create>Créer</button></div>
-      <small>Les rayons standards restent disponibles. La suppression déplace les articles vers Divers.</small>`);
+    const mb = this._modal(_("Gérer les rayons"), `
+      <div class="sh">${_("Catégories personnalisées")}</div>
+      ${(s.custom_aisles || []).map(a => `<div class="row"><span class="grow">${esc(a.icon || "🟣")} ${esc(a.name)}</span><button class="pill" data-edit="${esc(a.id)}">${_("Modifier")}</button><button class="pill danger" data-del="${esc(a.id)}">${_("Supprimer")}</button></div>`).join("") || `<div class="muted">${_("Aucune catégorie personnalisée.")}</div>`}
+      <div class="sh">${_("Nouvelle catégorie")}</div>
+      <div class="row"><input class="f grow" data-newname placeholder="${_("Ex. Bricolage")}"><input class="f" data-newicon value="🟣" maxlength="8" style="max-width:75px"><button class="pill main" data-create>${_("Créer")}</button></div>
+      <small>${_("Les rayons standards restent disponibles. La suppression déplace les articles vers Divers.")}</small>`);
     mb.querySelector('[data-create]').addEventListener('click', async () => {
       const name = mb.querySelector('[data-newname]').value.trim(), icon = mb.querySelector('[data-newicon]').value.trim();
-      if (!name) return this._toast("Indique un nom de rayon");
-      try { const a = await this._ws('aisle/create', {name, icon}); this._close(); if (onCreated) onCreated(a.id); else this._toast("Rayon créé"); } catch(e) { this._toast(e.message || String(e)); }
+      if (!name) return this._toast(_("Indique un nom de rayon"));
+      try { const a = await this._ws('aisle/create', {name, icon}); this._close(); if (onCreated) onCreated(a.id); else this._toast(_("Rayon créé")); } catch(e) { this._toast(e.message || String(e)); }
     });
     mb.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', async () => {
       const a = s.custom_aisles.find(x => x.id === b.dataset.edit);
-      const name = prompt('Nom du rayon', a.name); if (name === null) return;
-      const icon = prompt('Pastille ou emoji', a.icon || '🟣'); if (icon === null) return;
+      const name = prompt(_("Nom du rayon"), a.name); if (name === null) return;
+      const icon = prompt(_("Pastille ou emoji"), a.icon || '🟣'); if (icon === null) return;
       try { await this._ws('aisle/update', {aisle_id:a.id,name,icon}); this._categoryModal(onCreated); } catch(e) {this._toast(e.message || String(e));}
     }));
     mb.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
-      if (!confirm('Supprimer ce rayon ? Ses articles seront déplacés vers Divers.')) return;
+      if (!confirm(_("Supprimer ce rayon ? Ses articles seront déplacés vers Divers."))) return;
       try { await this._ws('aisle/delete', {aisle_id:b.dataset.del}); this._categoryModal(onCreated); } catch(e) {this._toast(e.message || String(e));}
     }));
   }
@@ -688,16 +1132,16 @@ class HolmMyMenuCard extends HTMLElement {
     if (!originals.length) return;
     const group = (this._s.shopping.groups || []).find(g => JSON.stringify(g.ids) === JSON.stringify(ids));
     const item = originals[0];
-    const mb = this._modal("Modifier un article", `
-      <label class="fl">Article<input class="f" data-f="name" value="${esc(group?.name || item.name)}"></label>
-      ${ids.length === 1 ? `<label class="fl">Quantité affichée<input class="f" data-f="display" value="${esc(item.display || '')}"></label>` : `<small>Quantités regroupées : modifier les quantités dans les recettes sources pour éviter de les compter plusieurs fois.</small>`}
-      <label class="fl">Rayon<select class="f" data-f="aisle">${this._s.aisles.map(([k,l]) => `<option value="${esc(k)}" ${k === item.aisle ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
-      <div class="row"><button class="pill" data-newrayon>+ Nouveau rayon</button><button class="pill main" data-save>Enregistrer</button></div>
-      <small>Les modifications ne changent pas les recettes d'origine.</small>`);
+    const mb = this._modal(_("Modifier un article"), `
+      <label class="fl">${_("Article")}<input class="f" data-f="name" value="${esc(group?.name || item.name)}"></label>
+      ${ids.length === 1 ? `<label class="fl">${_("Quantité affichée")}<input class="f" data-f="display" value="${esc(item.display || '')}"></label>` : `<small>${_("Quantités regroupées : modifier les quantités dans les recettes sources pour éviter de les compter plusieurs fois.")}</small>`}
+      <label class="fl">${_("Rayon")}<select class="f" data-f="aisle">${this._s.aisles.map(([k,l]) => `<option value="${esc(k)}" ${k === item.aisle ? 'selected' : ''}>${esc(_(l))}</option>`).join('')}</select></label>
+      <div class="row"><button class="pill" data-newrayon>${_("+ Nouveau rayon")}</button><button class="pill main" data-save>${_("Enregistrer")}</button></div>
+      <small>${_("Les modifications ne changent pas les recettes d'origine.")}</small>`);
     mb.querySelector('[data-newrayon]').addEventListener('click', () => this._categoryModal(() => this._shopEdit(ids)));
     mb.querySelector('[data-save]').addEventListener('click', async () => {
       const changes = {}; mb.querySelectorAll('[data-f]').forEach(f => changes[f.dataset.f] = f.value.trim());
-      if (!changes.name) return this._toast('Nom requis');
+      if (!changes.name) return this._toast(_("Nom requis"));
       try { await this._ws('shopping/update', {item_ids:ids, changes}); this._close(); } catch(e) {this._toast(e.message || String(e));}
     });
   }
@@ -705,10 +1149,10 @@ class HolmMyMenuCard extends HTMLElement {
   // PARTAGE : conserver la période sélectionnée et les quantités de la liste.
   _shopText(withChecked = false) {
     const s = this._s, sh = s.shopping || {}, items = (sh.groups || sh.items || []).filter((i) => withChecked || !i.checked);
-    const head = sh.range ? `Liste de courses — ${shopRange(sh.range.start, sh.range.end, true)}` : "Liste de courses";
+    const head = sh.range ? `${_("Liste de courses")} — ${shopRange(sh.range.start, sh.range.end, true)}` : _("Liste de courses");
     const parts = s.aisles.map(([k, l]) => [l, items.filter((i) => (i.aisle || "autre") === k)]).filter((g) => g[1].length)
-      .map(([l, its]) => `${l.toUpperCase()}\n${its.sort((a, b) => a.name.localeCompare(b.name, "fr")).map((i) => `- ${i.name}${i.display ? ` : ${i.display}` : ""}`).join("\n")}`);
-    return `${head}\n\n${parts.join("\n\n") || "(liste vide)"}\n\n— HOLM My Menu`;
+      .map(([l, its]) => `${_(l).toUpperCase()}\n${its.sort((a, b) => a.name.localeCompare(b.name, LANG)).map((i) => `- ${i.name}${i.display ? ` : ${i.display}` : ""}`).join("\n")}`);
+    return `${head}\n\n${parts.join("\n\n") || _("(liste vide)")}\n\n— HOLM My Menu`;
   }
   _shareModal() {
     const selC = new Set(load("holm-mymenu-to", [])), selE = new Set(load("holm-mymenu-devices", []));
@@ -724,55 +1168,55 @@ class HolmMyMenuCard extends HTMLElement {
     let info = null;
     this._ws("mail/info").then((x) => { info = x; draw(); }).catch(() => {});
     const devices = () => Object.keys(this._hass.states).filter((e) => e.startsWith("notify.") && ((this._hass.entities || {})[e] || {}).platform !== "smtp")
-      .map((e) => [e, this._hass.states[e].attributes.friendly_name || e]).sort((a, b) => a[1].localeCompare(b[1], "fr"));
+      .map((e) => [e, this._hass.states[e].attributes.friendly_name || e]).sort((a, b) => a[1].localeCompare(b[1], LANG));
     let draw = () => {
-      const contacts = (this._s.contacts || []).slice().sort((a, b) => a.name.localeCompare(b.name, "fr"));
+      const contacts = (this._s.contacts || []).slice().sort((a, b) => a.name.localeCompare(b.name, LANG));
       const text = this._shopText();
       const picked = contacts.filter((c) => selC.has(c.id));
       const mailto = `mailto:${encodeURIComponent(picked.map((c) => c.email).join(","))}?subject=${encodeURIComponent(text.split("\n")[0])}&body=${encodeURIComponent(text)}`;
       const devs = devices();
-      const mb = this._modal("Envoyer la liste de courses", `
-        <div class="sh">Par e-mail</div>
+      const mb = this._modal(_("Envoyer la liste de courses"), `
+        <div class="sh">${_("Par e-mail")}</div>
         ${contacts.length ? `<div class="clist">${contacts.map((c) => `<label class="ct ${selC.has(c.id) ? "on" : ""}"><input type="checkbox" data-c="${c.id}" ${selC.has(c.id) ? "checked" : ""}>
             <span class="av">${esc(c.name.slice(0, 1).toUpperCase())}</span><span class="cn"><b>${esc(c.name)}</b><small>${esc(c.email)}</small></span>
-            <button class="ib" data-del="${c.id}" title="Retirer du carnet"><ha-icon icon="mdi:close"></ha-icon></button></label>`).join("")}</div>`
-          : `<div class="muted">Votre carnet d'adresses est vide : ajoutez les personnes à qui envoyer la liste.</div>`}
-        <div class="row addc"><input class="f cnm" placeholder="Nom (Marie, Paul…)"><input class="f grow cem" type="email" placeholder="adresse e-mail"><button class="pill" data-x="addc"><ha-icon icon="mdi:account-plus"></ha-icon>Ajouter</button></div>
-        ${info && !info.smtp ? `<div class="warn">Aucune intégration SMTP n'est configurée dans Home Assistant : utilisez « Ouvrir ma messagerie », ou ajoutez l'intégration SMTP pour envoyer directement.</div>` : info ? `<div class="muted small2">Envoyé par ${esc(info.sender)} (intégration ${esc(info.name)}), en un seul message à toutes les adresses cochées.</div>` : ""}
-        ${devs.length ? `<div class="sh">Sur un téléphone ou une tablette (notification)</div>
+            <button class="ib" data-del="${c.id}" title="${_("Retirer du carnet")}"><ha-icon icon="mdi:close"></ha-icon></button></label>`).join("")}</div>`
+          : `<div class="muted">${_("Votre carnet d'adresses est vide : ajoutez les personnes à qui envoyer la liste.")}</div>`}
+        <div class="row addc"><input class="f cnm" placeholder="${_("Nom (Marie, Paul…)")}"><input class="f grow cem" type="email" placeholder="${_("adresse e-mail")}"><button class="pill" data-x="addc"><ha-icon icon="mdi:account-plus"></ha-icon>${_("Ajouter")}</button></div>
+        ${info && !info.smtp ? `<div class="warn">${_("Aucune intégration SMTP n'est configurée dans Home Assistant : utilisez « Ouvrir ma messagerie », ou ajoutez l'intégration SMTP pour envoyer directement.")}</div>` : info ? `<div class="muted small2">${_("Envoyé par {s} (intégration {i}), en un seul message à toutes les adresses cochées.", { s: esc(info.sender), i: esc(info.name) })}</div>` : ""}
+        ${devs.length ? `<div class="sh">${_("Sur un téléphone ou une tablette (notification)")}</div>
           <div class="dlist">${devs.map(([e, n]) => `<label class="chip ${selE.has(e) ? "on" : ""}"><input type="checkbox" data-e="${e}" ${selE.has(e) ? "checked" : ""}>${esc(n)}</label>`).join("")}</div>` : ""}
         <div class="row" style="align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <div class="sh">Par Telegram (liste interactive synchronisée)</div>
+          <div class="sh">${_("Par Telegram (liste interactive synchronisée)")}</div>
           ${telegramTargets.length ? `<label class="chip ${selectedTelegram().length === telegramTargets.length ? "on" : ""}" style="cursor:pointer">
             <input type="checkbox" data-tgall ${selectedTelegram().length === telegramTargets.length ? "checked" : ""}>
-            Tout sélectionner / désélectionner
+            ${_("Tout sélectionner / désélectionner")}
           </label>` : ""}
         </div>
-        <div class="muted small2">Sélectionne les conversations destinataires. Le numéro du sujet est facultatif.</div>
-        <div class="row addc"><input class="f tg-chat" placeholder="Chat ID (ex. -1001234567890)"><input class="f tg-thread" placeholder="Sujet / thread ID (facultatif)"><button class="pill" data-x="addtg"><ha-icon icon="mdi:plus"></ha-icon>Ajouter</button></div>
+        <div class="muted small2">${_("Sélectionne les conversations destinataires. Le numéro du sujet est facultatif.")}</div>
+        <div class="row addc"><input class="f tg-chat" placeholder="${_("Chat ID (ex. -1001234567890)")}"><input class="f tg-thread" placeholder="${_("Sujet / thread ID (facultatif)")}"><button class="pill" data-x="addtg"><ha-icon icon="mdi:plus"></ha-icon>${_("Ajouter")}</button></div>
         ${telegramTargets.length ? `<div class="clist">${telegramTargets.map((t, i) => `
           <div class="ct ${tgSelected.includes(tgKey(t)) ? "on" : ""}" style="display:flex;align-items:center;gap:12px;padding:12px 14px">
             <label style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer">
               <input type="checkbox" data-tg="${i}" ${tgSelected.includes(tgKey(t)) ? "checked" : ""}>
               <span class="av"><ha-icon icon="mdi:telegram"></ha-icon></span>
               <span class="cn" style="min-width:0">
-                <b style="display:block">Conversation Telegram</b>
+                <b style="display:block">${_("Conversation Telegram")}</b>
                 <small style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px">
                   <span><ha-icon icon="mdi:account-group-outline" style="--mdc-icon-size:16px;vertical-align:middle"></ha-icon> Chat ID : <strong>${esc(String(t.chat_id))}</strong></span>
-                  ${t.thread_id ? `<span><ha-icon icon="mdi:forum-outline" style="--mdc-icon-size:16px;vertical-align:middle"></ha-icon> Sujet : <strong>${esc(String(t.thread_id))}</strong></span>` : `<span>Sans sujet</span>`}
+                  ${t.thread_id ? `<span><ha-icon icon="mdi:forum-outline" style="--mdc-icon-size:16px;vertical-align:middle"></ha-icon> ${_("Sujet :")} <strong>${esc(String(t.thread_id))}</strong></span>` : `<span>${_("Sans sujet")}</span>`}
                 </small>
               </span>
             </label>
-            <button class="ib" data-tgdel="${i}" title="Retirer cette conversation"><ha-icon icon="mdi:close"></ha-icon></button>
+            <button class="ib" data-tgdel="${i}" title="${_("Retirer cette conversation")}"><ha-icon icon="mdi:close"></ha-icon></button>
           </div>`).join("")}</div>` : ""}
-        <div class="row end sendrow"><a class="pill" href="${mailto}"><ha-icon icon="mdi:email-edit-outline"></ha-icon>Ouvrir ma messagerie</a>
-          <button class="pill main" data-x="send" ${selC.size || selE.size || selectedTelegram().length ? "" : "disabled"}><ha-icon icon="mdi:send"></ha-icon>Envoyer${selC.size + selE.size + selectedTelegram().length ? ` (${selC.size + selE.size + selectedTelegram().length})` : ""}</button></div>
-        <details class="adv"><summary>Aperçu de la liste</summary><pre class="prev">${esc(text)}</pre></details>`, { wide: true });
+        <div class="row end sendrow"><a class="pill" href="${mailto}"><ha-icon icon="mdi:email-edit-outline"></ha-icon>${_("Ouvrir ma messagerie")}</a>
+          <button class="pill main" data-x="send" ${selC.size || selE.size || selectedTelegram().length ? "" : "disabled"}><ha-icon icon="mdi:send"></ha-icon>${_("Envoyer")}${selC.size + selE.size + selectedTelegram().length ? ` (${selC.size + selE.size + selectedTelegram().length})` : ""}</button></div>
+        <details class="adv"><summary>${_("Aperçu de la liste")}</summary><pre class="prev">${esc(text)}</pre></details>`, { wide: true });
       mb.querySelectorAll("input").forEach((x) => { x.addEventListener("keydown", (e) => e.stopPropagation()); x.addEventListener("keyup", (e) => e.stopPropagation()); });
       mb.querySelector('[data-x="addtg"]').addEventListener("click", () => {
         const chat = mb.querySelector(".tg-chat").value.trim();
         const thread = mb.querySelector(".tg-thread").value.trim();
-        if (!/^-?\d+$/.test(chat) || (thread && !/^\d+$/.test(thread))) return this._toast("Identifiant Telegram invalide");
+        if (!/^-?\d+$/.test(chat) || (thread && !/^\d+$/.test(thread))) return this._toast(_("Identifiant Telegram invalide"));
         if (!telegramTargets.some((t) => t.chat_id === chat && (t.thread_id || "") === thread)) {
           const target = { chat_id: chat, thread_id: thread };
           telegramTargets.push(target);
@@ -802,26 +1246,26 @@ class HolmMyMenuCard extends HTMLElement {
       mb.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async (e) => {
         e.preventDefault(); e.stopPropagation();
         const c = contacts.find((x) => x.id === b.dataset.del);
-        if (!confirm(`Retirer ${c.name} du carnet d'adresses ?`)) return;
+        if (!confirm(_("Retirer {n} du carnet d'adresses ?", { n: c.name }))) return;
         selC.delete(c.id); save("holm-mymenu-to", [...selC]);
         await this._do(this._ws("contact/delete", { contact_id: c.id }));
       }));
       const add = async () => {
         const nm = mb.querySelector(".cnm").value.trim(), em = mb.querySelector(".cem").value.trim();
-        if (!em) return this._toast("Indiquez une adresse e-mail");
-        const c = await this._do(this._ws("contact/save", { name: nm, email: em }), `${nm || em} ajouté au carnet`);
+        if (!em) return this._toast(_("Indiquez une adresse e-mail"));
+        const c = await this._do(this._ws("contact/save", { name: nm, email: em }), _("{n} ajouté au carnet", { n: nm || em }));
         selC.add(c.id); save("holm-mymenu-to", [...selC]);
       };
       mb.querySelector('[data-x="addc"]').addEventListener("click", add);
       mb.querySelector(".cem").addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
       mb.querySelector('[data-x="send"]').addEventListener("click", async (e) => {
-        const btn = e.currentTarget; btn.disabled = true; btn.lastChild.textContent = "Envoi…";
+        const btn = e.currentTarget; btn.disabled = true; btn.lastChild.textContent = _("Envoi…");
         try {
           const out = await this._ws("shopping/send", { contacts: [...selC], entities: [...selE], telegram_targets: selectedTelegram() });
           const n = out.emails.length, d = out.entities.length, t = (out.telegram_targets || []).length;
-          this._toast(`Liste envoyée${n ? ` à ${n} adresse${n > 1 ? "s" : ""}` : ""}${n && d ? " et" : ""}${d ? ` à ${d} appareil${d > 1 ? "s" : ""}` : ""}${t ? ` · Telegram (${t})` : ""}`);
+          this._toast(_("Liste envoyée") + (n ? " " + _(n > 1 ? _("à {n} adresses") : _("à {n} adresse"), { n }) : "") + (n && d ? " " + _("et") : "") + (d ? " " + _(d > 1 ? _("à {n} appareils") : _("à {n} appareil"), { n: d }) : "") + (t ? ` · Telegram (${t})` : ""));
           this._close();
-        } catch (err) { this._toast(`Envoi impossible : ${(err && err.message) || err}`); draw(); }
+        } catch (err) { this._toast(`${_("Envoi impossible")} : ${(err && err.message) || err}`); draw(); }
       });
     };
     const refresh = () => { const a = this.shadowRoot.activeElement; if (!a || !a.matches("input.cnm, input.cem")) draw(); };
@@ -833,6 +1277,7 @@ class HolmMyMenuCard extends HTMLElement {
   // ---------------- fenêtres ----------------
   // FENÊTRES : fermeture explicite pour les formulaires qui ne doivent pas perdre leur contenu.
   _modal(title, html, opts = {}) {
+    setLang(this._hass, this._c);
     this._editingRecipe = false;
     let root = this.shadowRoot.querySelector(".modal-root");
     if (!root) { root = document.createElement("div"); root.className = "modal-root"; this.shadowRoot.appendChild(root); }
@@ -855,22 +1300,22 @@ class HolmMyMenuCard extends HTMLElement {
       const s = this._s, entries = (s.plan[day] || {})[slot] || [];
       const dt = new Date(day + "T00:00");
       const mb = this._modal(`${SLOT_LBL[slot]} · ${fdate(dt, { weekday: "long", day: "numeric", month: "long" })}`, `
-        ${entries.length ? [["recipe", "Recettes", "mdi:chef-hat"], ["ingredient", "Ingrédients", "mdi:food-apple-outline"], ["text", "Notes", "mdi:text"]].map(([t, lbl, ic]) => {
+        ${entries.length ? [["recipe", _("Recettes"), "mdi:chef-hat"], ["ingredient", _("Ingrédients"), "mdi:food-apple-outline"], ["text", _("Notes"), "mdi:text"]].map(([t, lbl, ic]) => {
           const list = entries.map((e, i) => [e, i]).filter(([e]) => e.type === t);
           if (!list.length) return "";
           return `<div class="egrp"><div class="rh"><ha-icon icon="${ic}"></ha-icon>${lbl}<em>${list.length}</em></div><div class="ents">${list.map(([e, i]) => {
             if (t === "recipe") { const r = s.recipes[e.recipe_id] || {}; return `<div class="ent"><div class="ei op" data-open="${e.recipe_id}" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}></div>
-                <div class="en"><b class="lnk2" data-open="${e.recipe_id}">${esc(r.name || "?")}</b><small>${r.total ? mins(r.total) + " · " : ""}<span class="stp"><button data-sv="${i}" data-d="-1">−</button>${e.servings} pers.<button data-sv="${i}" data-d="1">+</button></span></small></div>
+                <div class="en"><b class="lnk2" data-open="${e.recipe_id}">${esc(r.name || "?")}</b><small>${r.total ? mins(r.total) + " · " : ""}<span class="stp"><button data-sv="${i}" data-d="-1">−</button>${_("{n} pers.", { n: e.servings })}<button data-sv="${i}" data-d="1">+</button></span></small></div>
                 <button class="ib" data-rm="${i}"><ha-icon icon="mdi:delete-outline"></ha-icon></button></div>`; }
             if (t === "ingredient") { const g = s.ingredients[e.ingredient_id] || {}; return `<div class="ent"><div class="ei sm op ${g.image ? "pic" : ""}" data-oping="${e.ingredient_id}" ${g.image ? `style="background-image:url('${esc(g.image)}')"` : ""}>${g.image ? "" : `<ha-icon icon="mdi:food-apple-outline"></ha-icon>`}</div>
-                <div class="en"><b class="lnk2" data-oping="${e.ingredient_id}">${esc(g.name || "?")}</b><small>${esc([g.brand, g.quantity].filter(Boolean).join(" · ") || "ingrédient")}</small></div>
+                <div class="en"><b class="lnk2" data-oping="${e.ingredient_id}">${esc(g.name || "?")}</b><small>${esc([g.brand, g.quantity].filter(Boolean).join(" · ") || _("ingrédient"))}</small></div>
                 <button class="ib" data-rm="${i}"><ha-icon icon="mdi:delete-outline"></ha-icon></button></div>`; }
-            return `<div class="ent"><div class="ei sm"><ha-icon icon="mdi:text"></ha-icon></div><div class="en"><b>${esc(e.text)}</b><small>note</small></div><button class="ib" data-rm="${i}"><ha-icon icon="mdi:delete-outline"></ha-icon></button></div>`;
+            return `<div class="ent"><div class="ei sm"><ha-icon icon="mdi:text"></ha-icon></div><div class="en"><b>${esc(e.text)}</b><small>${_("note")}</small></div><button class="ib" data-rm="${i}"><ha-icon icon="mdi:delete-outline"></ha-icon></button></div>`;
           }).join("")}</div></div>`;
-        }).join("") : `<div class="muted">Rien de prévu pour ce repas.</div>`}
-        ${entries.length ? `<div class="muted small2">Vous pouvez ajouter plusieurs recettes et plusieurs ingrédients à ce repas.</div>` : ""}
-        <div class="addbox"><input class="pick" placeholder="Ajouter : recette, ingrédient ou texte libre…" autofocus><div class="res"></div></div>
-        ${entries.length ? `<div class="row"><span class="muted">Déplacer vers</span><select class="mv"><option value="">—</option>${this._weekOptions(day, slot)}</select><label class="muted"><input type="checkbox" class="cp"> copier</label></div>` : ""}`,
+        }).join("") : `<div class="muted">${_("Rien de prévu pour ce repas.")}</div>`}
+        ${entries.length ? `<div class="muted small2">${_("Vous pouvez ajouter plusieurs recettes et plusieurs ingrédients à ce repas.")}</div>` : ""}
+        <div class="addbox"><input class="pick" placeholder="${_("Ajouter : recette, ingrédient ou texte libre…")}" autofocus><div class="res"></div></div>
+        ${entries.length ? `<div class="row"><span class="muted">${_("Déplacer vers")}</span><select class="mv"><option value="">—</option>${this._weekOptions(day, slot)}</select><label class="muted"><input type="checkbox" class="cp"> ${_("copier")}</label></div>` : ""}`,
         { refresh: () => {
           const root = this.shadowRoot.querySelector(".modal-root"), res = root && root.querySelector(".res"), old = root && root.querySelector(".pick");
           if (res && res.querySelector(".mgrid") && !picked) return; // résultats Marmiton / Jow affichés : on ne les efface pas
@@ -890,7 +1335,7 @@ class HolmMyMenuCard extends HTMLElement {
       if (mv) mv.addEventListener("change", () => { if (!mv.value) return; const [dd, ss] = mv.value.split("|"); this._do(this._ws("plan/move", { src_day: day, src_slot: slot, dst_day: dd, dst_slot: ss, copy: mb.querySelector(".cp").checked })); this._close(); });
       this._picker(mb.querySelector(".pick"), mb.querySelector(".res"), (entry) => {
         const cur = ((this._s.plan[day] || {})[slot] || []);
-        if (cur.some((x) => same(x, entry))) return this._toast("Déjà dans ce repas");
+        if (cur.some((x) => same(x, entry))) return this._toast(_("Déjà dans ce repas"));
         picked = true;
         return this._do(this._ws("plan/add", { day, slot, entry }));
       });
@@ -908,17 +1353,17 @@ class HolmMyMenuCard extends HTMLElement {
     const draw = () => {
       const q = input.value.trim(), nq = norm(q);
       if (!q) { const favs = Object.values(s.recipes).filter((r) => r.favorite).slice(0, 8);
-        res.innerHTML = favs.length ? `<div class="rh">Favoris</div>${favs.map((r) => this._resRecipe(r)).join("")}` : ""; bind(); return; }
+        res.innerHTML = favs.length ? `<div class="rh">${_("Favoris")}</div>${favs.map((r) => this._resRecipe(r)).join("")}` : ""; bind(); return; }
       const recs = Object.values(s.recipes).filter((r) => norm(r.name).includes(nq)).slice(0, 8);
       const ings = Object.values(s.ingredients).filter((i) => norm(i.name).includes(nq)).slice(0, 5);
-      res.innerHTML = `${recs.length ? `<div class="rh">Mes recettes</div>${recs.map((r) => this._resRecipe(r)).join("")}` : ""}
-        ${ings.length ? `<div class="rh">Ingrédients</div>${ings.map((i) => `<div class="ri2" data-ing="${i.id}"><div class="ei sm" ${i.image ? `style="background-image:url('${esc(i.image)}')"` : ""}>${i.image ? "" : `<ha-icon icon="mdi:food-apple-outline"></ha-icon>`}</div><b>${esc(i.name)}</b></div>`).join("")}` : ""}
-        <div class="rh">Autres choix</div>
-        <div class="ri2" data-web="marmiton"><div class="ei sm mm"><ha-icon icon="mdi:magnify"></ha-icon></div><b>Chercher « ${esc(q)} » sur Marmiton</b></div>
-        <div class="ri2" data-web="jow"><div class="ei sm mm jw"><ha-icon icon="mdi:magnify"></ha-icon></div><b>Chercher « ${esc(q)} » sur Jow</b></div>
-        ${ings.some((i) => norm(i.name) === nq) ? "" : `<div class="ri2" data-newing="1"><div class="ei sm"><ha-icon icon="mdi:food-apple-outline"></ha-icon></div><b>Ajouter « ${esc(q)} » comme ingrédient</b></div>`}
-        <div class="ri2" data-text="1"><div class="ei sm"><ha-icon icon="mdi:text"></ha-icon></div><b>Ajouter « ${esc(q)} » comme note</b></div>
-        <div class="offbox">${q.length >= 3 ? `<div class="rh">Open Food Facts</div><div class="muted pad">Recherche…</div>` : ""}</div>`;
+      res.innerHTML = `${recs.length ? `<div class="rh">${_("Mes recettes")}</div>${recs.map((r) => this._resRecipe(r)).join("")}` : ""}
+        ${ings.length ? `<div class="rh">${_("Ingrédients")}</div>${ings.map((i) => `<div class="ri2" data-ing="${i.id}"><div class="ei sm" ${i.image ? `style="background-image:url('${esc(i.image)}')"` : ""}>${i.image ? "" : `<ha-icon icon="mdi:food-apple-outline"></ha-icon>`}</div><b>${esc(i.name)}</b></div>`).join("")}` : ""}
+        <div class="rh">${_("Autres choix")}</div>
+        <div class="ri2" data-web="marmiton"><div class="ei sm mm"><ha-icon icon="mdi:magnify"></ha-icon></div><b>${_("Chercher « {q} » sur {s}", { q: esc(q), s: "Marmiton" })}</b></div>
+        <div class="ri2" data-web="jow"><div class="ei sm mm jw"><ha-icon icon="mdi:magnify"></ha-icon></div><b>${_("Chercher « {q} » sur {s}", { q: esc(q), s: "Jow" })}</b></div>
+        ${ings.some((i) => norm(i.name) === nq) ? "" : `<div class="ri2" data-newing="1"><div class="ei sm"><ha-icon icon="mdi:food-apple-outline"></ha-icon></div><b>${_("Ajouter « {q} » comme ingrédient", { q: esc(q) })}</b></div>`}
+        <div class="ri2" data-text="1"><div class="ei sm"><ha-icon icon="mdi:text"></ha-icon></div><b>${_("Ajouter « {q} » comme note", { q: esc(q) })}</b></div>
+        <div class="offbox">${q.length >= 3 ? `<div class="rh">Open Food Facts</div><div class="muted pad">${_("Recherche…")}</div>` : ""}</div>`;
       bind();
       clearTimeout(offT);
       if (q.length >= 3) offT = setTimeout(() => offSearch(q), 450);
@@ -932,11 +1377,11 @@ class HolmMyMenuCard extends HTMLElement {
       const box = res.querySelector(".offbox");
       if (seq !== offSeq || input.value.trim() !== q || !box) return;
       box.innerHTML = `<div class="rh">Open Food Facts${out.off_error ? ` — ${esc(out.off_error)}` : ""}</div>
-        ${out.off.length ? `<div class="offg">${out.off.slice(0, 8).map((p, i) => this._offTile(p, i)).join("")}</div>` : out.off_error ? "" : `<div class="muted pad">Aucun produit.</div>`}`;
+        ${out.off.length ? `<div class="offg">${out.off.slice(0, 8).map((p, i) => this._offTile(p, i)).join("")}</div>` : out.off_error ? "" : `<div class="muted pad">${_("Aucun produit.")}</div>`}`;
       box.querySelectorAll("[data-off]").forEach((b) => b.addEventListener("click", async () => {
         const p = out.off[+b.dataset.off];
         b.classList.add("busy");
-        const ing = await this._do(this._ws("ingredient/add", { name: cap(q), off: p }), `« ${cap(q)} » ajouté à vos ingrédients`);
+        const ing = await this._do(this._ws("ingredient/add", { name: cap(q), off: p }), _("« {n} » ajouté à vos ingrédients", { n: cap(q) }));
         onPick({ type: "ingredient", ingredient_id: ing.id }); input.value = ""; draw();
       }));
     };
@@ -976,7 +1421,7 @@ class HolmMyMenuCard extends HTMLElement {
       inp.addEventListener("change", async () => {
         const f = inp.files && inp.files[0]; inp.remove();
         if (!f) return resolve(null);
-        try { resolve(await this._shrink(f)); } catch (e) { this._toast("Photo illisible"); resolve(null); }
+        try { resolve(await this._shrink(f)); } catch (e) { this._toast(_("Photo illisible")); resolve(null); }
       });
       document.body.appendChild(inp); inp.click();
       setTimeout(() => inp.remove(), 120000);
@@ -988,10 +1433,10 @@ class HolmMyMenuCard extends HTMLElement {
       let stream = null, facing = "environment", done = false;
       const ov = document.createElement("div");
       ov.className = "camov";
-      ov.innerHTML = `<div class="camwrap"><video playsinline muted autoplay></video><div class="cammsg">Ouverture de l'appareil photo…</div>
-        <div class="cambar"><button class="ib camx" title="Annuler"><ha-icon icon="mdi:close"></ha-icon></button>
-          <button class="shutter" title="Prendre la photo" disabled></button>
-          <button class="ib camflip" title="Changer de caméra"><ha-icon icon="mdi:camera-flip-outline"></ha-icon></button></div></div>`;
+      ov.innerHTML = `<div class="camwrap"><video playsinline muted autoplay></video><div class="cammsg">${_("Ouverture de l'appareil photo…")}</div>
+        <div class="cambar"><button class="ib camx" title="${_("Annuler")}"><ha-icon icon="mdi:close"></ha-icon></button>
+          <button class="shutter" title="${_("Prendre la photo")}" disabled></button>
+          <button class="ib camflip" title="${_("Changer de caméra")}"><ha-icon icon="mdi:camera-flip-outline"></ha-icon></button></div></div>`;
       this.shadowRoot.appendChild(ov);
       const video = ov.querySelector("video"), msg = ov.querySelector(".cammsg"), shutter = ov.querySelector(".shutter");
       const stop = () => { if (stream) stream.getTracks().forEach((t) => t.stop()); stream = null; };
@@ -1029,8 +1474,8 @@ class HolmMyMenuCard extends HTMLElement {
   }
   _photoBox(current) {
     return `<div class="photobox"><div class="pv" ${current ? `style="background-image:url('${esc(current)}')"` : ""}>${current ? "" : `<ha-icon icon="mdi:image-outline"></ha-icon>`}</div>
-      <div class="pb"><button class="pill" data-ph="pick"><ha-icon icon="mdi:image-plus"></ha-icon>Choisir une photo</button>
-        <button class="pill" data-ph="cam"><ha-icon icon="mdi:camera"></ha-icon>Prendre une photo</button></div></div>`;
+      <div class="pb"><button class="pill" data-ph="pick"><ha-icon icon="mdi:image-plus"></ha-icon>${_("Choisir une photo")}</button>
+        <button class="pill" data-ph="cam"><ha-icon icon="mdi:camera"></ha-icon>${_("Prendre une photo")}</button></div></div>`;
   }
   _bindPhoto(root, onImage) {
     root.querySelectorAll("[data-ph]").forEach((b) => b.addEventListener("click", async () => {
@@ -1053,48 +1498,48 @@ class HolmMyMenuCard extends HTMLElement {
     const NAME = { marmiton: "Marmiton", jow: "Jow" }[src];
     const head = (extra = "") => `<div class="rh webh"><span class="seg mini">${["marmiton", "jow"].map((k) => `<button class="${k === src ? "on" : ""}" data-src="${k}">${{ marmiton: "Marmiton", jow: "Jow" }[k]}</button>`).join("")}</span>${extra}</div>`;
     const bindSrc = () => box.querySelectorAll("[data-src]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); if (b.dataset.src !== src) this._webResults(q, box, onDone, b.dataset.src); }));
-    box.innerHTML = `${head()}<div class="muted pad">Recherche sur ${NAME}…</div>`; bindSrc();
+    box.innerHTML = `${head()}<div class="muted pad">${_("Recherche sur {s}…", { s: NAME })}</div>`; bindSrc();
     const seq = (this._webSeq = (this._webSeq || 0) + 1);
     let res;
     try { res = await this._ws("recipe/web_search", { query: q, source: src }); } catch (e) { if (seq !== this._webSeq) return; box.innerHTML = `${head()}<div class="muted pad">${esc(e.message || e)}</div>`; bindSrc(); return; }
     if (seq !== this._webSeq) return;
-    if (!res.length) { box.innerHTML = `${head()}<div class="muted pad">Aucune recette trouvée sur ${NAME}.</div>`; bindSrc(); return; }
-    box.innerHTML = `${head(`<span>${res.length} résultats</span>`)}<div class="mgrid">${res.map((r, i) => `<div class="mc" data-i="${i}"><div class="ri" style="background-image:url('${esc(r.image)}')">${r.recipe_id ? `<i class="have">déjà importée</i>` : ""}</div><div class="rn">${esc(r.name)}</div>${r.rating || r.total ? `<div class="rm">${r.rating ? `<span><ha-icon icon="mdi:star"></ha-icon>${fq(r.rating)}${r.reviews ? ` (${r.reviews})` : ""}</span>` : ""}${r.total ? `<span><ha-icon icon="mdi:clock-outline"></ha-icon>${mins(r.total)}</span>` : ""}</div>` : ""}</div>`).join("")}</div>`;
+    if (!res.length) { box.innerHTML = `${head()}<div class="muted pad">${_("Aucune recette trouvée sur {s}.", { s: NAME })}</div>`; bindSrc(); return; }
+    box.innerHTML = `${head(`<span>${_("{n} résultats", { n: res.length })}</span>`)}<div class="mgrid">${res.map((r, i) => `<div class="mc" data-i="${i}"><div class="ri" style="background-image:url('${esc(r.image)}')">${r.recipe_id ? `<i class="have">${_("déjà importée")}</i>` : ""}</div><div class="rn">${esc(r.name)}</div>${r.rating || r.total ? `<div class="rm">${r.rating ? `<span><ha-icon icon="mdi:star"></ha-icon>${fq(r.rating)}${r.reviews ? ` (${r.reviews})` : ""}</span>` : ""}${r.total ? `<span><ha-icon icon="mdi:clock-outline"></ha-icon>${mins(r.total)}</span>` : ""}</div>` : ""}</div>`).join("")}</div>`;
     bindSrc();
     box.querySelectorAll(".mc").forEach((el) => el.addEventListener("click", async () => {
       const r = res[+el.dataset.i];
       if (r.recipe_id) return onDone(r.recipe_id);
       el.classList.add("busy");
-      try { const out = await this._ws("recipe/import", { url: r.url }); this._toast(`« ${out.recipe.name} » importée`); onDone(out.recipe.id); }
-      catch (e) { el.classList.remove("busy"); this._toast(`Import impossible : ${e.message || e}`); }
+      try { const out = await this._ws("recipe/import", { url: r.url }); this._toast(_("« {n} » importée", { n: out.recipe.name })); onDone(out.recipe.id); }
+      catch (e) { el.classList.remove("busy"); this._toast(`${_("Import impossible")} : ${e.message || e}`); }
     }));
   }
   async _duplicateRecipe(r) {
-    const copy = await this._do(this._ws("recipe/duplicate", { recipe_id: r.id }), `Copie créée : « ${r.name} (revisitée) »`);
+    const copy = await this._do(this._ws("recipe/duplicate", { recipe_id: r.id }), _("Copie créée : « {n} (revisitée) »", { n: r.name }));
     if (copy) this._editRecipe(copy);
   }
 
   // ----- recette -----
   async _recipeModal(id, back, opts = {}) {
     let r;
-    try { r = await this._ws("recipe/get", { recipe_id: id }); } catch (e) { return this._toast("Recette introuvable"); }
+    try { r = await this._ws("recipe/get", { recipe_id: id }); } catch (e) { return this._toast(_("Recette introuvable")); }
     let sv = opts.servings || r.servings || 4;
     const ro = !!opts.readonly;
     const draw = () => {
       const f = sv / (r.servings || 1);
       const mb = this._modal(esc(r.name), `
         <div class="rhero" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}></div>
-        <div class="rmeta">${r.prep ? `<span><ha-icon icon="mdi:knife"></ha-icon>Prépa ${mins(r.prep)}</span>` : ""}${r.cook ? `<span><ha-icon icon="mdi:stove"></ha-icon>Cuisson ${mins(r.cook)}</span>` : ""}${r.total ? `<span><ha-icon icon="mdi:clock-outline"></ha-icon>${mins(r.total)}</span>` : ""}${r.category ? `<span><ha-icon icon="mdi:tag-outline"></ha-icon>${esc(r.category)}</span>` : ""}${r.rating ? `<span><ha-icon icon="mdi:star"></ha-icon>${fq(r.rating)}</span>` : ""}${!ro && r.mealie_enabled ? `<button class="mealie-x${r.mealie_slug ? " on" : ""}" data-x="mealie" title="${r.mealie_slug ? "Ouvrir dans Mealie" : "Envoyer vers Mealie"}" aria-label="${r.mealie_slug ? "Ouvrir dans Mealie" : "Envoyer vers Mealie"}"><ha-icon icon="mdi:chef-hat"></ha-icon>${r.mealie_slug ? `<ha-icon class="ok" icon="mdi:check-circle"></ha-icon>` : ""}</button>` : ""}</div>
-        ${ro ? (r.source_url ? `<div class="row act"><a class="pill" href="${esc(r.source_url)}" target="_blank" rel="noopener"><ha-icon icon="mdi:open-in-new"></ha-icon>Voir la recette d'origine</a></div>` : "") : `<div class="row act"><button class="pill main" data-x="plan"><ha-icon icon="mdi:calendar-plus"></ha-icon>Planifier</button>
-          <button class="pill" data-x="fav"><ha-icon icon="mdi:heart${r.favorite ? "" : "-outline"}"></ha-icon>${r.favorite ? "Favori" : "Ajouter aux favoris"}</button>
-          <button class="pill" data-x="edit"><ha-icon icon="mdi:pencil"></ha-icon>Modifier</button>
-          <button class="pill" data-x="dup" title="Créer une copie à modifier, l'original reste intact"><ha-icon icon="mdi:content-copy"></ha-icon>Dupliquer</button>
-          ${r.source_url ? `<a class="pill" href="${esc(r.source_url)}" target="_blank" rel="noopener"><ha-icon icon="mdi:open-in-new"></ha-icon>Source</a>` : ""}
+        <div class="rmeta">${r.prep ? `<span><ha-icon icon="mdi:knife"></ha-icon>${_("Prépa")} ${mins(r.prep)}</span>` : ""}${r.cook ? `<span><ha-icon icon="mdi:stove"></ha-icon>${_("Cuisson")} ${mins(r.cook)}</span>` : ""}${r.total ? `<span><ha-icon icon="mdi:clock-outline"></ha-icon>${mins(r.total)}</span>` : ""}${r.category ? `<span><ha-icon icon="mdi:tag-outline"></ha-icon>${esc(r.category)}</span>` : ""}${r.rating ? `<span><ha-icon icon="mdi:star"></ha-icon>${fq(r.rating)}</span>` : ""}${!ro && r.mealie_enabled ? `<button class="mealie-x${r.mealie_slug ? " on" : ""}" data-x="mealie" title="${r.mealie_slug ? _("Ouvrir dans Mealie") : _("Envoyer vers Mealie")}" aria-label="${r.mealie_slug ? _("Ouvrir dans Mealie") : _("Envoyer vers Mealie")}"><ha-icon icon="mdi:chef-hat"></ha-icon>${r.mealie_slug ? `<ha-icon class="ok" icon="mdi:check-circle"></ha-icon>` : ""}</button>` : ""}</div>
+        ${ro ? (r.source_url ? `<div class="row act"><a class="pill" href="${esc(r.source_url)}" target="_blank" rel="noopener"><ha-icon icon="mdi:open-in-new"></ha-icon>${_("Voir la recette d'origine")}</a></div>` : "") : `<div class="row act"><button class="pill main" data-x="plan"><ha-icon icon="mdi:calendar-plus"></ha-icon>${_("Planifier")}</button>
+          <button class="pill" data-x="fav"><ha-icon icon="mdi:heart${r.favorite ? "" : "-outline"}"></ha-icon>${r.favorite ? _("Favori") : _("Ajouter aux favoris")}</button>
+          <button class="pill" data-x="edit"><ha-icon icon="mdi:pencil"></ha-icon>${_("Modifier")}</button>
+          <button class="pill" data-x="dup" title="${_("Créer une copie à modifier, l'original reste intact")}"><ha-icon icon="mdi:content-copy"></ha-icon>${_("Dupliquer")}</button>
+          ${r.source_url ? `<a class="pill" href="${esc(r.source_url)}" target="_blank" rel="noopener"><ha-icon icon="mdi:open-in-new"></ha-icon>${_("Source")}</a>` : ""}
           <button class="pill danger" data-x="del"><ha-icon icon="mdi:delete-outline"></ha-icon></button></div>`}
-        ${r.copied_from && this._s.recipes[r.copied_from] ? `<div class="insp"><ha-icon icon="mdi:source-branch"></ha-icon>Inspirée de <button class="lnk" data-x="orig">${esc(this._s.recipes[r.copied_from].name)}</button></div>` : ""}
-        <div class="cols"><div><div class="sh">Ingrédients <span class="stp"><button data-s="-1">−</button>${sv} pers.<button data-s="1">+</button></span></div>
+        ${r.copied_from && this._s.recipes[r.copied_from] ? `<div class="insp"><ha-icon icon="mdi:source-branch"></ha-icon>${_("Inspirée de")} <button class="lnk" data-x="orig">${esc(this._s.recipes[r.copied_from].name)}</button></div>` : ""}
+        <div class="cols"><div><div class="sh">${_("Ingrédients")} <span class="stp"><button data-s="-1">−</button>${_("{n} pers.", { n: sv })}<button data-s="1">+</button></span></div>
             <ul class="ingl">${(r.ingredients || []).map((l) => `<li ${l.ingredient_id && this._s.ingredients[l.ingredient_id] ? `class="lk" data-ing="${l.ingredient_id}"` : ""}><b>${l.qty != null ? fq(l.qty * f) + (l.unit ? " " + esc(l.unit) : "") : esc(l.unit || "")}</b> ${esc(l.name)}${l.note ? ` <small>(${esc(l.note)})</small>` : ""}</li>`).join("")}</ul></div>
-          <div><div class="sh">Préparation</div><ol class="steps">${(r.steps || []).map((s) => `<li>${esc(s)}</li>`).join("") || `<li class="muted">Aucune étape.</li>`}</ol></div></div>`,
+          <div><div class="sh">${_("Préparation")}</div><ol class="steps">${(r.steps || []).map((s) => `<li>${esc(s)}</li>`).join("") || `<li class="muted">${_("Aucune étape.")}</li>`}</ol></div></div>`,
         { wide: true, back });
       mb.querySelectorAll("[data-s]").forEach((b) => b.addEventListener("click", () => { sv = Math.max(1, sv + +b.dataset.s); draw(); }));
       mb.querySelectorAll("li[data-ing]").forEach((li) => li.addEventListener("click", () => this._ingModal(li.dataset.ing, ro, () => this._recipeModal(id, back, { ...opts, servings: sv }))));
@@ -1103,7 +1548,7 @@ class HolmMyMenuCard extends HTMLElement {
       mb.querySelector('[data-x="dup"]').addEventListener("click", () => this._duplicateRecipe(r));
       mb.querySelector('[data-x="fav"]').addEventListener("click", async () => { r = await this._ws("recipe/save", { recipe_id: r.id, recipe: { favorite: !r.favorite } }); draw(); });
       mb.querySelector('[data-x="edit"]').addEventListener("click", () => this._editRecipe(r));
-      mb.querySelector('[data-x="del"]').addEventListener("click", async () => { if (!confirm(`Supprimer « ${r.name} » ?`)) return; await this._ws("recipe/delete", { recipe_id: r.id }); this._close(); });
+      mb.querySelector('[data-x="del"]').addEventListener("click", async () => { if (!confirm(_("Supprimer « {n} » ?", { n: r.name }))) return; await this._ws("recipe/delete", { recipe_id: r.id }); this._close(); });
       mb.querySelector('[data-x="plan"]').addEventListener("click", () => this._planRecipe(r, sv, () => draw()));
       mb.querySelector('[data-x="mealie"]')?.addEventListener("click", async (e) => {
         const b = e.currentTarget;
@@ -1112,7 +1557,7 @@ class HolmMyMenuCard extends HTMLElement {
         try {
           const out = await this._ws("mealie/export", { recipe_id: r.id });
           r = { ...r, mealie_slug: out.slug, mealie_link: out.link };
-          this._toast(out.created ? `« ${r.name} » envoyée vers Mealie` : `« ${r.name} » est déjà dans Mealie`);
+          this._toast(out.created ? _("« {n} » envoyée vers Mealie", { n: r.name }) : _("« {n} » est déjà dans Mealie", { n: r.name }));
           if (!out.created) window.open(out.link, "_blank", "noopener");
           draw();
         } catch (err) { this._toast(`Export Mealie : ${err.message || err}`); b.disabled = false; b.classList.remove("busy"); }
@@ -1123,10 +1568,10 @@ class HolmMyMenuCard extends HTMLElement {
   _planRecipe(r, sv, back) {
     const w0 = monday(new Date()), today = iso(new Date());
     const days = [...Array(14)].map((_, i) => addDays(w0, i)).filter((d) => iso(d) >= today);
-    const mb = this._modal(`Planifier « ${esc(r.name)} »`, `<div class="muted">${sv} personnes · choisissez un repas</div>
+    const mb = this._modal(_("Planifier « {n} »", { n: esc(r.name) }), `<div class="muted">${_("{n} personnes · choisissez un repas", { n: sv })}</div>
       <div class="plgrid">${days.map((d) => { const k = iso(d); return `<div class="pld"><b>${fdate(d, { weekday: "short", day: "numeric", month: "short" })}</b>${this._s.slots.map((sl) => { const n = ((this._s.plan[k] || {})[sl] || []).length; return `<button class="pill ${n ? "busy" : ""}" data-k="${k}" data-sl="${sl}">${SLOT_LBL[sl]}${n ? " •" : ""}</button>`; }).join("")}</div>`; }).join("")}</div>`, { back });
     mb.querySelectorAll("[data-k]").forEach((b) => b.addEventListener("click", async () => {
-      await this._do(this._ws("plan/add", { day: b.dataset.k, slot: b.dataset.sl, entry: { type: "recipe", recipe_id: r.id, servings: sv } }), `Ajoutée au ${SLOT_LBL[b.dataset.sl].toLowerCase()} du ${fdate(new Date(b.dataset.k + "T00:00"), { weekday: "long", day: "numeric" })}`);
+      await this._do(this._ws("plan/add", { day: b.dataset.k, slot: b.dataset.sl, entry: { type: "recipe", recipe_id: r.id, servings: sv } }), _("Ajoutée au {s} du {d}", { s: SLOT_LBL[b.dataset.sl].toLowerCase(), d: fdate(new Date(b.dataset.k + "T00:00"), { weekday: "long", day: "numeric" }) }));
       back();
     }));
   }
@@ -1134,17 +1579,17 @@ class HolmMyMenuCard extends HTMLElement {
     const isNew = !r || !r.id;
     r = r || { name: "", servings: this._s.servings, ingredients: [], steps: [] };
     const lines = Array.isArray(r.lines) ? r.lines.join("\n") : (r.ingredients || []).map((l) => [l.qty != null ? fq(l.qty) : "", l.unit, l.name, l.note ? `(${l.note})` : ""].filter(Boolean).join(" ")).join("\n");
-    const mb = this._modal(isNew ? "Nouvelle recette" : `Modifier « ${esc(r.name)} »`, `
-      <label class="fl">Nom<input class="f" data-f="name" value="${esc(r.name)}"></label>
-      <div class="row"><label class="fl">Personnes<input class="f" type="number" min="1" data-f="servings" value="${r.servings || 4}"></label>
-        <label class="fl">Préparation (min)<input class="f" type="number" min="0" data-f="prep" value="${r.prep || ""}"></label>
-        <label class="fl">Cuisson (min)<input class="f" type="number" min="0" data-f="cook" value="${r.cook || ""}"></label></div>
-      <label class="fl">Catégorie<input class="f" data-f="category" value="${esc(r.category || "")}" placeholder="Plat principal, dessert…"></label>
-      <div class="fl">Photo${this._photoBox(r.image)}</div>
-      <details class="adv"><summary>Ou une adresse d'image sur Internet</summary><input class="f" data-f="image" value="${esc(r.image_remote || (String(r.image || "").startsWith("http") ? r.image : ""))}" placeholder="https://…"></details>
-      <label class="fl">Ingrédients — un par ligne (ex. « 200 g de farine »)<textarea class="f" rows="8" data-f="lines">${esc(lines)}</textarea></label>
-      <label class="fl">Étapes — une par ligne<textarea class="f" rows="8" data-f="steps">${esc((r.steps || []).join("\n"))}</textarea></label>
-      <div class="row end"><button class="pill" data-x="cancel">Annuler</button><button class="pill main" data-x="save"><ha-icon icon="mdi:content-save"></ha-icon>Enregistrer</button></div>`,
+    const mb = this._modal(isNew ? _("Nouvelle recette") : _("Modifier « {n} »", { n: esc(r.name) }), `
+      <label class="fl">${_("Nom")}<input class="f" data-f="name" value="${esc(r.name)}"></label>
+      <div class="row"><label class="fl">${_("Personnes")}<input class="f" type="number" min="1" data-f="servings" value="${r.servings || 4}"></label>
+        <label class="fl">${_("Préparation (min)")}<input class="f" type="number" min="0" data-f="prep" value="${r.prep || ""}"></label>
+        <label class="fl">${_("Cuisson (min)")}<input class="f" type="number" min="0" data-f="cook" value="${r.cook || ""}"></label></div>
+      <label class="fl">${_("Catégorie")}<input class="f" data-f="category" value="${esc(r.category || "")}" placeholder="${_("Plat principal, dessert…")}"></label>
+      <div class="fl">${_("Photo")}${this._photoBox(r.image)}</div>
+      <details class="adv"><summary>${_("Ou une adresse d'image sur Internet")}</summary><input class="f" data-f="image" value="${esc(r.image_remote || (String(r.image || "").startsWith("http") ? r.image : ""))}" placeholder="https://…"></details>
+      <label class="fl">${_("Ingrédients — un par ligne (ex. « 200 g de farine »)")}<textarea class="f" rows="8" data-f="lines">${esc(lines)}</textarea></label>
+      <label class="fl">${_("Étapes — une par ligne")}<textarea class="f" rows="8" data-f="steps">${esc((r.steps || []).join("\n"))}</textarea></label>
+      <div class="row end"><button class="pill" data-x="cancel">${_("Annuler")}</button><button class="pill main" data-x="save"><ha-icon icon="mdi:content-save"></ha-icon>${_("Enregistrer")}</button></div>`,
       { wide: true, dismissOnBackdrop: false, back: isNew ? () => this._addRecipeModal() : () => this._recipeModal(r.id) });
     this._editingRecipe = true;
     // Isoler les gestes de sélection des raccourcis et clics du tableau de bord.
@@ -1157,7 +1602,7 @@ class HolmMyMenuCard extends HTMLElement {
       const area = document.createElement("details");
       area.className = "adv";
       const summary = document.createElement("summary");
-      summary.textContent = `Texte non classé (${unclassified.length} lignes) — à vérifier`;
+      summary.textContent = _("Texte non classé ({n} lignes) — à vérifier", { n: unclassified.length });
       const raw = document.createElement("textarea");
       raw.className = "f";
       raw.rows = 5;
@@ -1176,41 +1621,41 @@ class HolmMyMenuCard extends HTMLElement {
     mb.querySelector('[data-x="cancel"]').addEventListener("click", () => (isNew ? this._close() : this._recipeModal(r.id)));
     mb.querySelector('[data-x="save"]').addEventListener("click", async () => {
       const v = (k) => mb.querySelector(`[data-f="${k}"]`).value.trim();
-      if (!v("name")) return this._toast("Donnez un nom à la recette");
+      if (!v("name")) return this._toast(_("Donnez un nom à la recette"));
       const rec = { name: v("name"), servings: +v("servings") || 4, prep: +v("prep") || null, cook: +v("cook") || null, category: v("category"),
         lines: v("lines").split("\n").map((x) => x.trim()).filter(Boolean), steps: v("steps").split("\n").map((x) => x.trim()).filter(Boolean) };
       rec.total = (rec.prep || 0) + (rec.cook || 0) || null;
       const img = v("image"); if (!photo && img && img !== (r.image_remote || r.image || "")) rec.image = img;
       if (isNew) { rec.source = r.source || "manual"; if (r.source_url) rec.source_url = r.source_url; }
-      const out = await this._do(this._ws("recipe/save", { recipe_id: isNew ? null : r.id, recipe: rec }), photo ? null : "Recette enregistrée");
-      if (photo) await this._do(this._ws("image/upload", { kind: "recipe", item_id: out.id, data: photo }), "Recette et photo enregistrées");
+      const out = await this._do(this._ws("recipe/save", { recipe_id: isNew ? null : r.id, recipe: rec }), photo ? null : _("Recette enregistrée"));
+      if (photo) await this._do(this._ws("image/upload", { kind: "recipe", item_id: out.id, data: photo }), _("Recette et photo enregistrées"));
       this._recipeModal(out.id);
     });
   }
   _addRecipeModal(mode = "marmiton") {
-    const mb = this._modal("Ajouter une recette", `
-      <div class="seg">${[["marmiton", "mdi:magnify", "Recherche"], ["url", "mdi:link-variant", "Lien"], ["document", "mdi:file-pdf-box", "PDF"], ["mealie", "mdi:chef-hat", "Mealie"], ["manual", "mdi:pencil", "À la main"]].map(([k, i, l]) => `<button class="${mode === k ? "on" : ""}" data-m="${k}"><ha-icon icon="${i}"></ha-icon>${l}</button>`).join("")}</div>
+    const mb = this._modal(_("Ajouter une recette"), `
+      <div class="seg">${[["marmiton", "mdi:magnify", _("Recherche")], ["url", "mdi:link-variant", _("Lien")], ["document", "mdi:file-pdf-box", "PDF"], ["mealie", "mdi:chef-hat", "Mealie"], ["manual", "mdi:pencil", _("À la main")]].map(([k, i, l]) => `<button class="${mode === k ? "on" : ""}" data-m="${k}"><ha-icon icon="${i}"></ha-icon>${l}</button>`).join("")}</div>
       <div class="pane"></div>`, { wide: true });
     mb.querySelectorAll("[data-m]").forEach((b) => b.addEventListener("click", () => this._addRecipeModal(b.dataset.m)));
     const pane = mb.querySelector(".pane");
     if (mode === "marmiton") {
-      pane.innerHTML = `<div class="row"><span class="seg srcsel">${[["marmiton", "Marmiton"], ["jow", "Jow"]].map(([k, l]) => `<button class="${this._webSrc() === k ? "on" : ""}" data-src0="${k}">${l}</button>`).join("")}</span><input class="f grow" placeholder="Ex. lasagnes, gratin dauphinois, tarte aux pommes…"><button class="pill main">Chercher</button></div><div class="res"></div>`;
+      pane.innerHTML = `<div class="row"><span class="seg srcsel">${[["marmiton", "Marmiton"], ["jow", "Jow"]].map(([k, l]) => `<button class="${this._webSrc() === k ? "on" : ""}" data-src0="${k}">${l}</button>`).join("")}</span><input class="f grow" placeholder="${_("Ex. lasagnes, gratin dauphinois, tarte aux pommes…")}"><button class="pill main">${_("Chercher")}</button></div><div class="res"></div>`;
       const inp = pane.querySelector("input"), go = () => inp.value.trim() && this._webResults(inp.value.trim(), pane.querySelector(".res"), (rid) => this._recipeModal(rid));
       pane.querySelectorAll("[data-src0]").forEach((b) => b.addEventListener("click", () => { this._webSrc(b.dataset.src0); pane.querySelectorAll("[data-src0]").forEach((x) => x.classList.toggle("on", x === b)); go(); }));
       pane.querySelector(".pill.main").addEventListener("click", go); inp.addEventListener("keydown", (e) => e.key === "Enter" && go()); setTimeout(() => inp.focus(), 50);
     } else if (mode === "url") {
-      pane.innerHTML = `<div class="muted">Collez l'adresse d'une recette : Marmiton, 750g, CuisineAZ, Journal des Femmes… (tout site qui décrit ses recettes au format standard).</div>
-        <div class="row"><input class="f grow" placeholder="https://www.marmiton.org/recettes/…"><button class="pill main">Importer</button></div>`;
+      pane.innerHTML = `<div class="muted">${_("Collez l'adresse d'une recette : Marmiton, 750g, CuisineAZ, Journal des Femmes… (tout site qui décrit ses recettes au format standard).")}</div>
+        <div class="row"><input class="f grow" placeholder="https://www.marmiton.org/recettes/…"><button class="pill main">${_("Importer")}</button></div>`;
       const inp = pane.querySelector("input");
-      const go = async () => { const u = inp.value.trim(); if (!/^https?:\/\//.test(u)) return this._toast("Adresse invalide");
-        const b = pane.querySelector("button"); b.disabled = true; b.textContent = "Import…";
-        try { const out = await this._ws("recipe/import", { url: u }); this._toast(out.existing ? "Cette recette est déjà dans votre base" : `« ${out.recipe.name} » importée`); this._recipeModal(out.recipe.id); }
-        catch (e) { this._toast(`Import impossible : ${e.message || e}`); b.disabled = false; b.textContent = "Importer"; } };
+      const go = async () => { const u = inp.value.trim(); if (!/^https?:\/\//.test(u)) return this._toast(_("Adresse invalide"));
+        const b = pane.querySelector("button"); b.disabled = true; b.textContent = _("Import…");
+        try { const out = await this._ws("recipe/import", { url: u }); this._toast(out.existing ? _("Cette recette est déjà dans votre base") : _("« {n} » importée", { n: out.recipe.name })); this._recipeModal(out.recipe.id); }
+        catch (e) { this._toast(`${_("Import impossible")} : ${e.message || e}`); b.disabled = false; b.textContent = _("Importer"); } };
       pane.querySelector("button").addEventListener("click", go); inp.addEventListener("keydown", (e) => e.key === "Enter" && go()); setTimeout(() => inp.focus(), 50);
     } else if (mode === "document") {
-      pane.innerHTML = `<div class="muted">Choisissez un fichier PDF (8 Mo maximum). L'extraction peut ne pas fonctionner avec les PDF scannés ou constitués uniquement d'images. Le fichier n'est pas conservé.</div>
-        <label class="fl">Fichier depuis cet appareil<input class="f" type="file" accept=".pdf,application/pdf"></label>
-        <div class="row"><button class="pill main" data-kind="file">Analyser le fichier</button></div>
+      pane.innerHTML = `<div class="muted">${_("Choisissez un fichier PDF (8 Mo maximum). L'extraction peut ne pas fonctionner avec les PDF scannés ou constitués uniquement d'images. Le fichier n'est pas conservé.")}</div>
+        <label class="fl">${_("Fichier depuis cet appareil")}<input class="f" type="file" accept=".pdf,application/pdf"></label>
+        <div class="row"><button class="pill main" data-kind="file">${_("Analyser le fichier")}</button></div>
         <div class="muted" data-status role="status"></div>`;
       const button = pane.querySelector('[data-kind="file"]');
       const status = pane.querySelector('[data-status]');
@@ -1218,10 +1663,10 @@ class HolmMyMenuCard extends HTMLElement {
       fileInput.addEventListener("change", () => { status.textContent = ""; });
       button.addEventListener("click", async () => {
         const f = fileInput.files?.[0];
-        if (!f) return this._toast("Sélectionnez un PDF");
-        if (!/\.pdf$/i.test(f.name) || (f.type && f.type !== "application/pdf")) return this._toast("Seuls les fichiers PDF sont acceptés");
-        if (f.size > 8 * 1024 * 1024) return this._toast("Fichier supérieur à 8 Mo");
-        if (!f.size) return this._toast("Le fichier est vide");
+        if (!f) return this._toast(_("Sélectionnez un PDF"));
+        if (!/\.pdf$/i.test(f.name) || (f.type && f.type !== "application/pdf")) return this._toast(_("Seuls les fichiers PDF sont acceptés"));
+        if (f.size > 8 * 1024 * 1024) return this._toast(_("Fichier supérieur à 8 Mo"));
+        if (!f.size) return this._toast(_("Le fichier est vide"));
         button.disabled = true;
         const original = button.innerHTML;
         let uploadId = null;
@@ -1237,20 +1682,20 @@ class HolmMyMenuCard extends HTMLElement {
             const data = await new Promise((resolve, reject) => {
               const reader = new FileReader();
               reader.onload = () => resolve(String(reader.result).split(",")[1]);
-              reader.onerror = () => reject(new Error("Lecture du fichier impossible"));
+              reader.onerror = () => reject(new Error(_("Lecture du fichier impossible")));
               reader.readAsDataURL(blob);
             });
             await this._ws("recipe/document_upload_chunk", { upload_id: uploadId, index, data });
-            status.textContent = `Transfert : ${Math.round((index + 1) * 100 / count)} %`;
+            status.textContent = `${_("Transfert")} : ${Math.round((index + 1) * 100 / count)} %`;
           }
-          status.textContent = "Analyse du document en cours…";
+          status.textContent = _("Analyse du document en cours…");
           const rec = await this._ws("recipe/document_upload_finish", { upload_id: uploadId });
           uploadId = null;
           if (rec.warnings?.length) this._toast(rec.warnings.join(" "));
           // Le parseur retourne des lignes brutes ; l'éditeur les affiche pour validation.
           this._editRecipe(rec);
         } catch (e) {
-          const message = `Analyse impossible : ${e.message || e}`;
+          const message = `${_("Analyse impossible")} : ${e.message || e}`;
           status.textContent = message;
           this._toast(message);
         } finally {
@@ -1260,19 +1705,19 @@ class HolmMyMenuCard extends HTMLElement {
         }
       });
     } else if (mode === "mealie") {
-      pane.innerHTML = `<div class="muted pad">Lecture de vos recettes Mealie…</div>`;
+      pane.innerHTML = `<div class="muted pad">${_("Lecture de vos recettes Mealie…")}</div>`;
       this._ws("mealie/list").then((list) => {
         const sel = new Set(list.filter((x) => !x.imported).map((x) => x.slug));
         const drawM = () => {
-          pane.innerHTML = `<div class="row"><span class="muted">${list.length} recettes · ${list.filter((x) => x.imported).length} déjà importées</span><span class="grow"></span>
-              <button class="lnk" data-all="1">Tout cocher</button><button class="lnk" data-all="0">Tout décocher</button></div>
-            <div class="mlist">${list.map((x) => `<label class="ml ${x.imported ? "done" : ""}"><input type="checkbox" data-slug="${esc(x.slug)}" ${x.imported ? "disabled checked" : sel.has(x.slug) ? "checked" : ""}><b>${esc(x.name)}</b>${x.imported ? "<small>importée</small>" : ""}</label>`).join("")}</div>
-            <div class="row end"><button class="pill main" data-go="1"><ha-icon icon="mdi:download"></ha-icon>Importer ${sel.size} recette${sel.size > 1 ? "s" : ""}</button></div>`;
-          pane.querySelectorAll("[data-slug]").forEach((c) => c.addEventListener("change", () => { c.checked ? sel.add(c.dataset.slug) : sel.delete(c.dataset.slug); pane.querySelector("[data-go]").innerHTML = `<ha-icon icon="mdi:download"></ha-icon>Importer ${sel.size} recette${sel.size > 1 ? "s" : ""}`; }));
+          pane.innerHTML = `<div class="row"><span class="muted">${_("{n} recettes · {i} déjà importées", { n: list.length, i: list.filter((x) => x.imported).length })}</span><span class="grow"></span>
+              <button class="lnk" data-all="1">${_("Tout cocher")}</button><button class="lnk" data-all="0">${_("Tout décocher")}</button></div>
+            <div class="mlist">${list.map((x) => `<label class="ml ${x.imported ? "done" : ""}"><input type="checkbox" data-slug="${esc(x.slug)}" ${x.imported ? "disabled checked" : sel.has(x.slug) ? "checked" : ""}><b>${esc(x.name)}</b>${x.imported ? `<small>${_("importée")}</small>` : ""}</label>`).join("")}</div>
+            <div class="row end"><button class="pill main" data-go="1"><ha-icon icon="mdi:download"></ha-icon>${_(sel.size > 1 ? _("Importer {n} recettes") : _("Importer {n} recette"), { n: sel.size })}</button></div>`;
+          pane.querySelectorAll("[data-slug]").forEach((c) => c.addEventListener("change", () => { c.checked ? sel.add(c.dataset.slug) : sel.delete(c.dataset.slug); pane.querySelector("[data-go]").innerHTML = `<ha-icon icon="mdi:download"></ha-icon>${_(sel.size > 1 ? _("Importer {n} recettes") : _("Importer {n} recette"), { n: sel.size })}`; }));
           pane.querySelectorAll("[data-all]").forEach((b) => b.addEventListener("click", () => { list.filter((x) => !x.imported).forEach((x) => (b.dataset.all === "1" ? sel.add(x.slug) : sel.delete(x.slug))); drawM(); }));
           pane.querySelector("[data-go]").addEventListener("click", async (e) => {
-            if (!sel.size) return; const b = e.currentTarget; b.disabled = true; b.textContent = `Import de ${sel.size} recettes…`;
-            try { const out = await this._ws("mealie/import", { slugs: [...sel] }); this._toast(`${out.imported} recette(s) importée(s) depuis Mealie${out.errors.length ? ` · ${out.errors.length} erreur(s)` : ""}`); this._close(); this._tab = "recipes"; this._render(); }
+            if (!sel.size) return; const b = e.currentTarget; b.disabled = true; b.textContent = _("Import de {n} recettes…", { n: sel.size });
+            try { const out = await this._ws("mealie/import", { slugs: [...sel] }); this._toast(_("{n} recette(s) importée(s) depuis Mealie", { n: out.imported }) + (out.errors.length ? " · " + _("{n} erreur(s)", { n: out.errors.length }) : "")); this._close(); this._tab = "recipes"; this._render(); }
             catch (err) { this._toast(`Import Mealie : ${err.message || err}`); b.disabled = false; }
           });
         };
@@ -1286,28 +1731,28 @@ class HolmMyMenuCard extends HTMLElement {
   // ----- ingrédients -----
   _addIngModal(q = "") {
     const cap = (v) => v.charAt(0).toUpperCase() + v.slice(1);
-    const mb = this._modal("Ajouter un ingrédient", `<div class="row"><input class="f grow" placeholder="Ex. purée, Nutella… ou un code-barre" value="${esc(q)}"><button class="pill main">Chercher</button>
-      <button class="pill" data-x="scan" title="Scanner un code-barre"><ha-icon icon="mdi:barcode-scan"></ha-icon>Scanner</button></div><div class="res"></div>`, { wide: true });
+    const mb = this._modal(_("Ajouter un ingrédient"), `<div class="row"><input class="f grow" placeholder="${_("Ex. purée, Nutella… ou un code-barre")}" value="${esc(q)}"><button class="pill main">${_("Chercher")}</button>
+      <button class="pill" data-x="scan" title="${_("Scanner un code-barre")}"><ha-icon icon="mdi:barcode-scan"></ha-icon>${_("Scanner")}</button></div><div class="res"></div>`, { wide: true });
     const inp = mb.querySelector("input"), res = mb.querySelector(".res");
     inp.addEventListener("keyup", (e) => e.stopPropagation());
     mb.querySelector('[data-x="scan"]').addEventListener("click", async () => { const code = await this._scanBarcode(); if (code) this._barcodeResult(code); else if (code === "") this._addIngModal(inp.value.trim()); });
     const go = async () => {
       const v = inp.value.trim(); if (!v) return;
       if (/^\d{8,14}$/.test(v.replace(/\s/g, ""))) return this._barcodeResult(v.replace(/\s/g, ""));
-      res.innerHTML = `<div class="muted pad">Recherche dans votre base et sur Open Food Facts…</div>`;
+      res.innerHTML = `<div class="muted pad">${_("Recherche dans votre base et sur Open Food Facts…")}</div>`;
       let out;
       try { out = await this._ws("ingredient/search", { query: v, off: true }); } catch (e) { res.innerHTML = `<div class="muted pad">${esc(e.message || e)}</div>`; return; }
-      res.innerHTML = `${out.local.length ? `<div class="rh">Déjà dans votre base</div>${out.local.map((i) => `<div class="ri2" data-open="${i.id}"><div class="ei sm" ${i.image ? `style="background-image:url('${esc(i.image)}')"` : ""}></div><b>${esc(i.name)}</b><small>${esc(i.brand || "")}</small></div>`).join("")}` : ""}
-        <label class="fl">Nom dans votre base<input class="f nm" value="${esc(cap(v))}"></label>
-        <div class="ri2" data-plain="1"><div class="ei sm"><ha-icon icon="mdi:plus"></ha-icon></div><b>Ajouter sans produit</b><small>vous pourrez associer un produit plus tard</small></div>
-        <div class="rh">Ou choisir un produit Open Food Facts${out.off_error ? ` — ${esc(out.off_error)}` : ` · ${out.off.length} résultat${out.off.length > 1 ? "s" : ""}`}</div>
+      res.innerHTML = `${out.local.length ? `<div class="rh">${_("Déjà dans votre base")}</div>${out.local.map((i) => `<div class="ri2" data-open="${i.id}"><div class="ei sm" ${i.image ? `style="background-image:url('${esc(i.image)}')"` : ""}></div><b>${esc(i.name)}</b><small>${esc(i.brand || "")}</small></div>`).join("")}` : ""}
+        <label class="fl">${_("Nom dans votre base")}<input class="f nm" value="${esc(cap(v))}"></label>
+        <div class="ri2" data-plain="1"><div class="ei sm"><ha-icon icon="mdi:plus"></ha-icon></div><b>${_("Ajouter sans produit")}</b><small>${_("vous pourrez associer un produit plus tard")}</small></div>
+        <div class="rh">${_("Ou choisir un produit Open Food Facts")}${out.off_error ? ` — ${esc(out.off_error)}` : " · " + _(out.off.length > 1 ? _("{n} résultats") : _("{n} résultat"), { n: out.off.length })}</div>
         <div class="offg">${out.off.map((p, i) => this._offTile(p, i)).join("")}</div>`;
       const nm = () => res.querySelector(".nm").value.trim() || cap(v);
       res.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => this._ingModal(b.dataset.open)));
-      res.querySelector("[data-plain]").addEventListener("click", async () => { const ing = await this._do(this._ws("ingredient/add", { name: nm() }), `« ${nm()} » ajouté`); this._ingModal(ing.id); });
+      res.querySelector("[data-plain]").addEventListener("click", async () => { const ing = await this._do(this._ws("ingredient/add", { name: nm() }), _("« {n} » ajouté", { n: nm() })); this._ingModal(ing.id); });
       res.querySelectorAll("[data-off]").forEach((b) => b.addEventListener("click", async () => {
         b.classList.add("busy");
-        const ing = await this._do(this._ws("ingredient/add", { name: nm(), off: out.off[+b.dataset.off] }), `« ${nm()} » ajouté avec sa fiche produit`);
+        const ing = await this._do(this._ws("ingredient/add", { name: nm(), off: out.off[+b.dataset.off] }), _("« {n} » ajouté avec sa fiche produit", { n: nm() }));
         this._ingModal(ing.id);
       }));
     };
@@ -1317,25 +1762,25 @@ class HolmMyMenuCard extends HTMLElement {
   }
   // ----- code-barre -----
   async _barcodeResult(code) {
-    const mb = this._modal(`Code-barre ${esc(code)}`, `<div class="muted pad">Recherche du produit sur Open Food Facts…</div>`, { wide: true, back: () => this._addIngModal() });
+    const mb = this._modal(`${_("Code-barre")} ${esc(code)}`, `<div class="muted pad">${_("Recherche du produit sur Open Food Facts…")}</div>`, { wide: true, back: () => this._addIngModal() });
     let out;
     try { out = await this._ws("ingredient/barcode", { code }); } catch (e) {
-      mb.innerHTML = `<div class="muted pad">${esc(e.message || e)}</div><div class="row end"><button class="pill" data-x="again"><ha-icon icon="mdi:barcode-scan"></ha-icon>Scanner à nouveau</button></div>`;
+      mb.innerHTML = `<div class="muted pad">${esc(e.message || e)}</div><div class="row end"><button class="pill" data-x="again"><ha-icon icon="mdi:barcode-scan"></ha-icon>${_("Scanner à nouveau")}</button></div>`;
       mb.querySelector('[data-x="again"]').addEventListener("click", async () => { const c = await this._scanBarcode(); if (c) this._barcodeResult(c); });
       return;
     }
-    if (out.existing) { this._toast(`« ${out.existing.name} » est déjà dans vos ingrédients`); return this._ingModal(out.existing.id); }
+    if (out.existing) { this._toast(_("« {n} » est déjà dans vos ingrédients", { n: out.existing.name })); return this._ingModal(out.existing.id); }
     const p = out.product;
     mb.innerHTML = `<div class="ihead"><div class="oi big" ${p.image ? `style="background-image:url('${esc(p.image_full || p.image)}')"` : ""}></div>
         <div class="ihd"><b style="font-size:16px">${esc(p.name)}</b><div class="ibr">${esc([p.brand, p.quantity].filter(Boolean).join(" · "))}</div>
         ${p.nutriscore ? `<span class="ns lg" style="background:${NUTRI[p.nutriscore]}">Nutri-Score ${p.nutriscore.toUpperCase()}</span>` : ""}</div></div>
-      <label class="fl">Nom dans votre base<input class="f nm" value="${esc(p.name)}"></label>
-      <div class="row end"><button class="pill main" data-x="add"><ha-icon icon="mdi:plus"></ha-icon>Ajouter à mes ingrédients</button></div>`;
+      <label class="fl">${_("Nom dans votre base")}<input class="f nm" value="${esc(p.name)}"></label>
+      <div class="row end"><button class="pill main" data-x="add"><ha-icon icon="mdi:plus"></ha-icon>${_("Ajouter à mes ingrédients")}</button></div>`;
     const nm = mb.querySelector(".nm"); nm.addEventListener("keydown", (e) => e.stopPropagation()); nm.addEventListener("keyup", (e) => e.stopPropagation());
     mb.querySelector('[data-x="add"]').addEventListener("click", async (e) => {
       e.currentTarget.disabled = true;
       const name = nm.value.trim() || p.name;
-      const ing = await this._do(this._ws("ingredient/add", { name, off: p }), `« ${name} » ajouté avec sa fiche produit`);
+      const ing = await this._do(this._ws("ingredient/add", { name, off: p }), _("« {n} » ajouté avec sa fiche produit", { n: name }));
       this._ingModal(ing.id);
     });
   }
@@ -1345,10 +1790,10 @@ class HolmMyMenuCard extends HTMLElement {
       let done = false, stream = null, timer = null, zx = null;
       const stop = () => { clearInterval(timer); if (stream) stream.getTracks().forEach((t) => t.stop()); try { zx && zx.stop(); } catch (_) {} };
       const finish = (code) => { if (done) return; done = true; stop(); resolve(code === "" ? "" : code || null); };
-      const mb = this._modal("Scanner un code-barre", `
-        <div class="scan"><video playsinline muted></video><div class="aim"></div><div class="scanmsg">Ouverture de la caméra…</div></div>
-        <div class="row"><input class="f grow code" inputmode="numeric" placeholder="ou tapez le numéro sous le code-barre"><button class="pill main" data-x="ok">Valider</button></div>
-        <div class="row"><button class="pill" data-x="photo"><ha-icon icon="mdi:camera"></ha-icon>Photographier le code</button></div>`, { back: () => { finish(""); } });
+      const mb = this._modal(_("Scanner un code-barre"), `
+        <div class="scan"><video playsinline muted></video><div class="aim"></div><div class="scanmsg">${_("Ouverture de la caméra…")}</div></div>
+        <div class="row"><input class="f grow code" inputmode="numeric" placeholder="${_("ou tapez le numéro sous le code-barre")}"><button class="pill main" data-x="ok">${_("Valider")}</button></div>
+        <div class="row"><button class="pill" data-x="photo"><ha-icon icon="mdi:camera"></ha-icon>${_("Photographier le code")}</button></div>`, { back: () => { finish(""); } });
       const root = this.shadowRoot.querySelector(".modal-root");
       const obs = new MutationObserver(() => { if (!this.shadowRoot.contains(root) || !root.contains(mb)) { obs.disconnect(); finish(null); } });
       obs.observe(this.shadowRoot, { childList: true, subtree: true });
@@ -1360,7 +1805,7 @@ class HolmMyMenuCard extends HTMLElement {
       const zxing = async () => (await import("https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm"));
       mb.querySelector('[data-x="photo"]').addEventListener("click", async () => {
         const data = await this._pickImage(true); if (!data) return;
-        msg.textContent = "Lecture de la photo…";
+        msg.textContent = _("Lecture de la photo…");
         try {
           let code = null;
           if ("BarcodeDetector" in window) {
@@ -1369,25 +1814,25 @@ class HolmMyMenuCard extends HTMLElement {
           } else {
             const Z = await zxing(); const r = await new Z.BrowserMultiFormatReader().decodeFromImageUrl(data); code = r && r.getText();
           }
-          if (code) finish(code); else msg.textContent = "Aucun code-barre lu sur la photo. Réessayez de plus près.";
-        } catch (e) { msg.textContent = "Aucun code-barre lu sur la photo. Réessayez de plus près."; }
+          if (code) finish(code); else msg.textContent = _("Aucun code-barre lu sur la photo. Réessayez de plus près.");
+        } catch (e) { msg.textContent = _("Aucun code-barre lu sur la photo. Réessayez de plus près."); }
       });
       (async () => {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { msg.textContent = "Caméra indisponible ici : photographiez le code ou tapez son numéro."; return; }
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { msg.textContent = _("Caméra indisponible ici : photographiez le code ou tapez son numéro."); return; }
         try {
           if ("BarcodeDetector" in window) {
             stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
             if (done) return stop();
-            video.srcObject = stream; await video.play(); msg.textContent = "Visez le code-barre";
+            video.srcObject = stream; await video.play(); msg.textContent = _("Visez le code-barre");
             const det = new window.BarcodeDetector({ formats: FORMATS });
             timer = setInterval(async () => { try { const r = await det.detect(video); if (r[0]) finish(r[0].rawValue); } catch (_) {} }, 250);
           } else {
-            msg.textContent = "Chargement du lecteur…";
+            msg.textContent = _("Chargement du lecteur…");
             const Z = await zxing(); if (done) return;
             zx = await new Z.BrowserMultiFormatReader().decodeFromConstraints({ video: { facingMode: { ideal: "environment" } } }, video, (r) => { if (r) finish(r.getText()); });
-            msg.textContent = "Visez le code-barre";
+            msg.textContent = _("Visez le code-barre");
           }
-        } catch (e) { msg.textContent = "Caméra refusée ou indisponible : photographiez le code ou tapez son numéro."; }
+        } catch (e) { msg.textContent = _("Caméra refusée ou indisponible : photographiez le code ou tapez son numéro."); }
       })();
     });
   }
@@ -1396,65 +1841,65 @@ class HolmMyMenuCard extends HTMLElement {
     if (!i) return this._close();
     const recs = Object.values(s.recipes).filter((r) => (r.ingredients || []).some((l) => l.ingredient_id === id));
     const n = i.nutrition || {};
-    const NL = [["energy_kcal", "Énergie", "kcal"], ["fat", "Matières grasses", "g"], ["saturated_fat", "dont saturées", "g"], ["carbohydrates", "Glucides", "g"], ["sugars", "dont sucres", "g"], ["fiber", "Fibres", "g"], ["proteins", "Protéines", "g"], ["salt", "Sel", "g"]];
-    const rows = NL.filter(([k]) => n[k] != null).map(([k, l, u]) => `<tr class="${l.startsWith("dont") ? "sub" : ""}"><td>${l}</td><td>${fq(k === "energy_kcal" ? Math.round(n[k]) : n[k])} ${u}</td></tr>`).join("");
+    const NL = [["energy_kcal", _("Énergie"), "kcal"], ["fat", _("Matières grasses"), "g"], ["saturated_fat", _("dont saturées"), "g"], ["carbohydrates", _("Glucides"), "g"], ["sugars", _("dont sucres"), "g"], ["fiber", _("Fibres"), "g"], ["proteins", _("Protéines"), "g"], ["salt", _("Sel"), "g"]];
+    const rows = NL.filter(([k]) => n[k] != null).map(([k, l, u]) => `<tr class="${k === "saturated_fat" || k === "sugars" ? "sub" : ""}"><td>${l}</td><td>${fq(k === "energy_kcal" ? Math.round(n[k]) : n[k])} ${u}</td></tr>`).join("");
     const ECO = { a: "#1e8f4e", b: "#60ac0e", c: "#e3a21a", d: "#e7642b", e: "#c62828" };
     const badges = [i.nutriscore ? `<span class="ns lg" style="background:${NUTRI[i.nutriscore]}">Nutri-Score ${i.nutriscore.toUpperCase()}</span>` : "",
       i.ecoscore ? `<span class="ns lg" style="background:${ECO[i.ecoscore]}">Éco-Score ${i.ecoscore.toUpperCase()}</span>` : "",
       i.nova ? `<span class="ns lg" style="background:${["", "#00aa00", "#ffcc00", "#ff6600", "#ff0000"][i.nova] || "#888"}">NOVA ${i.nova}</span>` : ""].join("");
     const mb = this._modal(esc(i.name), `
       <div class="ihead"><div class="oi big" ${i.image ? `style="background-image:url('${esc(i.image)}')"` : ""}>${i.image ? "" : `<ha-icon icon="mdi:food-apple-outline"></ha-icon>`}</div>
-        <div class="ihd"><div class="ibr">${i.brand ? esc(i.brand) : '<span class="muted">Sans marque</span>'}${i.quantity ? ` · ${esc(i.quantity)}` : ""}</div>
+        <div class="ihd"><div class="ibr">${i.brand ? esc(i.brand) : `<span class="muted">${_("Sans marque")}</span>`}${i.quantity ? ` · ${esc(i.quantity)}` : ""}</div>
           ${badges ? `<div class="badges">${badges}</div>` : ""}
-          ${i.off_code ? `<a class="lnk" href="https://fr.openfoodfacts.org/produit/${esc(i.off_code)}" target="_blank" rel="noopener">Fiche Open Food Facts · ${esc(i.off_code)}</a>` : ""}</div></div>
+          ${i.off_code ? `<a class="lnk" href="https://fr.openfoodfacts.org/produit/${esc(i.off_code)}" target="_blank" rel="noopener">${_("Fiche Open Food Facts")} · ${esc(i.off_code)}</a>` : ""}</div></div>
       ${rows || i.ingredients_text || (i.allergens || []).length ? `<div class="offinfo">
-        ${rows ? `<div><div class="sh">Pour 100 g</div><table class="nut">${rows}</table></div>` : ""}
-        <div>${i.ingredients_text ? `<div class="sh">Composition</div><div class="small">${esc(i.ingredients_text)}</div>` : ""}
-          ${(i.allergens || []).length ? `<div class="sh">Allergènes</div><div class="chips">${i.allergens.map((a) => `<span class="chip warn">${esc(a)}</span>`).join("")}</div>` : ""}
-          ${(i.labels || []).length ? `<div class="sh">Labels</div><div class="chips">${i.labels.map((a) => `<span class="chip">${esc(a)}</span>`).join("")}</div>` : ""}</div></div>` : ""}
-      ${ro ? (i.notes ? `<div class="sh">Notes</div><div class="small">${esc(i.notes)}</div>` : "") + (recs.length ? `<div class="sh">Dans les recettes</div><div class="chips">${recs.map((r) => `<button class="chip" data-r="${r.id}">${esc(r.name)}</button>`).join("")}</div>` : "") : `
-      <div class="sh">Fiche</div>
-      <div class="row"><label class="fl">Nom<input class="f" data-f="name" value="${esc(i.name)}"></label>
-        <label class="fl">Rayon<select class="f" data-f="aisle">${s.aisles.map(([k, l]) => `<option value="${k}" ${k === (i.aisle || "autre") ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label></div>
-      <div class="row"><button class="pill" data-x="newrayon"><ha-icon icon="mdi:shape-plus"></ha-icon>Créer un rayon</button></div>
-      <div class="row"><label class="fl">Marque<input class="f" data-f="brand" value="${esc(i.brand || "")}"></label>
-        <label class="fl">Conditionnement<input class="f" data-f="quantity" value="${esc(i.quantity || "")}" placeholder="500 g, 1 l…"></label>
-        <label class="fl">Magasins<input class="f" data-f="stores" value="${esc(i.stores || "")}"></label></div>
-      <div class="fl">Photo${this._photoBox(i.image)}</div>
-      <label class="fl">Notes<input class="f" data-f="notes" value="${esc(i.notes || "")}" placeholder="Ex. prendre la version bio"></label>
-      <div class="row end"><button class="pill" data-x="off"><ha-icon icon="mdi:barcode-scan"></ha-icon>${i.off_code ? "Changer de produit" : "Associer un produit Open Food Facts"}</button><button class="pill main" data-x="save">Enregistrer</button></div>
-      <div class="sh">Utilisé dans ${recs.length} recette${recs.length > 1 ? "s" : ""}</div>
-      <div class="chips">${recs.map((r) => `<button class="chip" data-r="${r.id}">${esc(r.name)}</button>`).join("") || '<span class="muted">Aucune.</span>'}</div>
-      <div class="row end"><button class="pill danger" data-x="del"><ha-icon icon="mdi:delete-outline"></ha-icon>Supprimer l'ingrédient</button></div>`}`, { wide: true, back });
+        ${rows ? `<div><div class="sh">${_("Pour 100 g")}</div><table class="nut">${rows}</table></div>` : ""}
+        <div>${i.ingredients_text ? `<div class="sh">${_("Composition")}</div><div class="small">${esc(i.ingredients_text)}</div>` : ""}
+          ${(i.allergens || []).length ? `<div class="sh">${_("Allergènes")}</div><div class="chips">${i.allergens.map((a) => `<span class="chip warn">${esc(a)}</span>`).join("")}</div>` : ""}
+          ${(i.labels || []).length ? `<div class="sh">${_("Labels")}</div><div class="chips">${i.labels.map((a) => `<span class="chip">${esc(a)}</span>`).join("")}</div>` : ""}</div></div>` : ""}
+      ${ro ? (i.notes ? `<div class="sh">${_("Notes")}</div><div class="small">${esc(i.notes)}</div>` : "") + (recs.length ? `<div class="sh">${_("Dans les recettes")}</div><div class="chips">${recs.map((r) => `<button class="chip" data-r="${r.id}">${esc(r.name)}</button>`).join("")}</div>` : "") : `
+      <div class="sh">${_("Fiche")}</div>
+      <div class="row"><label class="fl">${_("Nom")}<input class="f" data-f="name" value="${esc(i.name)}"></label>
+        <label class="fl">${_("Rayon")}<select class="f" data-f="aisle">${s.aisles.map(([k, l]) => `<option value="${k}" ${k === (i.aisle || "autre") ? "selected" : ""}>${esc(_(l))}</option>`).join("")}</select></label></div>
+      <div class="row"><button class="pill" data-x="newrayon"><ha-icon icon="mdi:shape-plus"></ha-icon>${_("Créer un rayon")}</button></div>
+      <div class="row"><label class="fl">${_("Marque")}<input class="f" data-f="brand" value="${esc(i.brand || "")}"></label>
+        <label class="fl">${_("Conditionnement")}<input class="f" data-f="quantity" value="${esc(i.quantity || "")}" placeholder="${_("500 g, 1 l…")}"></label>
+        <label class="fl">${_("Magasins")}<input class="f" data-f="stores" value="${esc(i.stores || "")}"></label></div>
+      <div class="fl">${_("Photo")}${this._photoBox(i.image)}</div>
+      <label class="fl">${_("Notes")}<input class="f" data-f="notes" value="${esc(i.notes || "")}" placeholder="${_("Ex. prendre la version bio")}"></label>
+      <div class="row end"><button class="pill" data-x="off"><ha-icon icon="mdi:barcode-scan"></ha-icon>${i.off_code ? _("Changer de produit") : _("Associer un produit Open Food Facts")}</button><button class="pill main" data-x="save">${_("Enregistrer")}</button></div>
+      <div class="sh">${_(recs.length > 1 ? _("Utilisé dans {n} recettes") : _("Utilisé dans {n} recette"), { n: recs.length })}</div>
+      <div class="chips">${recs.map((r) => `<button class="chip" data-r="${r.id}">${esc(r.name)}</button>`).join("") || `<span class="muted">${_("Aucune.")}</span>`}</div>
+      <div class="row end"><button class="pill danger" data-x="del"><ha-icon icon="mdi:delete-outline"></ha-icon>${_("Supprimer l'ingrédient")}</button></div>`}`, { wide: true, back });
     mb.querySelectorAll("[data-r]").forEach((b) => b.addEventListener("click", () => this._recipeModal(b.dataset.r, () => this._ingModal(id, ro, back), { readonly: ro })));
     if (ro) return;
     mb.querySelectorAll("input").forEach((x) => { x.addEventListener("keydown", (e) => e.stopPropagation()); x.addEventListener("keyup", (e) => e.stopPropagation()); });
-    this._bindPhoto(mb, (d) => this._do(this._ws("image/upload", { kind: "ingredient", item_id: id, data: d }), "Photo enregistrée"));
+    this._bindPhoto(mb, (d) => this._do(this._ws("image/upload", { kind: "ingredient", item_id: id, data: d }), _("Photo enregistrée")));
     mb.querySelector('[data-x="newrayon"]')?.addEventListener("click", () => this._categoryModal(() => this._ingModal(id, ro, back)));
     mb.querySelector('[data-x="save"]').addEventListener("click", async () => {
       const ch = {};
       mb.querySelectorAll("[data-f]").forEach((f) => { ch[f.dataset.f] = f.value.trim(); });
       ch.name = ch.name || i.name;
       if (ch.aisle === (i.aisle || "autre")) delete ch.aisle;
-      await this._do(this._ws("ingredient/update", { ingredient_id: id, changes: ch }), "Ingrédient enregistré");
+      await this._do(this._ws("ingredient/update", { ingredient_id: id, changes: ch }), _("Ingrédient enregistré"));
       back ? back() : this._close();
     });
-    mb.querySelector('[data-x="del"]').addEventListener("click", async () => { if (!confirm(`Supprimer « ${i.name} » ? Les recettes garderont le texte de l'ingrédient.`)) return; await this._ws("ingredient/delete", { ingredient_id: id }); this._close(); });
+    mb.querySelector('[data-x="del"]').addEventListener("click", async () => { if (!confirm(_("Supprimer « {n} » ? Les recettes garderont le texte de l'ingrédient.", { n: i.name }))) return; await this._ws("ingredient/delete", { ingredient_id: id }); this._close(); });
     mb.querySelector('[data-x="off"]').addEventListener("click", () => this._offLink(i));
   }
   _offLink(i) {
-    const mb = this._modal(`Produit pour « ${esc(i.name)} »`, `<div class="row"><input class="f grow" value="${esc(i.name)}"><button class="pill main">Chercher</button></div><div class="res"></div>`, { wide: true, back: () => this._ingModal(i.id) });
+    const mb = this._modal(_("Produit pour « {n} »", { n: esc(i.name) }), `<div class="row"><input class="f grow" value="${esc(i.name)}"><button class="pill main">${_("Chercher")}</button></div><div class="res"></div>`, { wide: true, back: () => this._ingModal(i.id) });
     const inp = mb.querySelector("input"), res = mb.querySelector(".res");
     inp.addEventListener("keyup", (e) => e.stopPropagation());
     const go = async () => {
       const v = inp.value.trim(); if (!v) return;
-      res.innerHTML = `<div class="muted pad">Recherche sur Open Food Facts…</div>`;
+      res.innerHTML = `<div class="muted pad">${_("Recherche sur Open Food Facts…")}</div>`;
       let out;
       try { out = await this._ws("ingredient/search", { query: v, off: true }); } catch (e) { res.innerHTML = `<div class="muted pad">${esc(e.message || e)}</div>`; return; }
-      res.innerHTML = out.off.length ? `<div class="offg">${out.off.map((p, k) => this._offTile(p, k)).join("")}</div>` : `<div class="muted pad">${esc(out.off_error || "Aucun produit trouvé.")}</div>`;
+      res.innerHTML = out.off.length ? `<div class="offg">${out.off.map((p, k) => this._offTile(p, k)).join("")}</div>` : `<div class="muted pad">${esc(out.off_error || _("Aucun produit trouvé."))}</div>`;
       res.querySelectorAll("[data-off]").forEach((b) => b.addEventListener("click", async () => {
         b.classList.add("busy");
-        await this._do(this._ws("ingredient/update", { ingredient_id: i.id, changes: {}, off: out.off[+b.dataset.off] }), "Produit associé");
+        await this._do(this._ws("ingredient/update", { ingredient_id: i.id, changes: {}, off: out.off[+b.dataset.off] }), _("Produit associé"));
         this._ingModal(i.id);
       }));
     };
@@ -1717,17 +2162,18 @@ textarea.f { resize:vertical; font-family:inherit; }
 
 class HolmMyMenuCardEditor extends HTMLElement {
   setConfig(c) { this._c = { ...c }; this._draw(); }
-  set hass(h) { this._hass = h; if (this._f) this._f.hass = h; else this._draw(); }
+  set hass(h) { this._hass = h; if (this._f && langOf(h, this._c) !== this._lang) { this._f.remove(); this._f = null; } if (this._f) this._f.hass = h; else this._draw(); }
   _draw() {
     if (!this._hass || !this._c) return;
+    this._lang = setLang(this._hass, this._c);
     if (!this._f) {
       this._f = document.createElement("ha-form");
-      this._f.computeLabel = (s) => ({ title: "Titre", view: "Affichage", tab: "Onglet à l'ouverture", show_frame: "Afficher le cadre", today_slots: "Repas affichés (toutes les vues)", list_height: "Hauteur des listes en px (0 = sans limite)" }[s.name] || s.name);
-      this._f.schema = [{ name: "title", selector: { text: {} } },
+      this._f.computeLabel = (s) => ({ language: _("Langue"), title: _("Titre"), view: _("Affichage"), tab: _("Onglet à l'ouverture"), show_frame: _("Afficher le cadre"), today_slots: _("Repas affichés (toutes les vues)"), list_height: _("Hauteur des listes en px (0 = sans limite)") }[s.name] || s.name);
+      this._f.schema = [langField(), { name: "title", selector: { text: {} } },
         { type: "grid", name: "", schema: [
-          { name: "view", selector: { select: { mode: "dropdown", options: [{ value: "full", label: "Complet (semaine, recettes, ingrédients, courses)" }, { value: "today", label: "Menu du jour (compact, consultation)" }, { value: "week", label: "Semaine (planning, consultation)" }, { value: "stats", label: "Statistiques" }] } } },
-          { name: "tab", selector: { select: { mode: "dropdown", options: [{ value: "week", label: "Semaine" }, { value: "recipes", label: "Recettes" }, { value: "ingredients", label: "Ingrédients" }, { value: "shopping", label: "Courses" }, { value: "reminders", label: "Rappels" }, { value: "stats", label: "Statistiques" }] } } }] },
-        { name: "today_slots", selector: { select: { multiple: true, mode: "list", options: [{ value: "midi", label: "Midi" }, { value: "soir", label: "Soir" }] } } },
+          { name: "view", selector: { select: { mode: "dropdown", options: [{ value: "full", label: _("Complet (semaine, recettes, ingrédients, courses)") }, { value: "today", label: _("Menu du jour (compact, consultation)") }, { value: "week", label: _("Semaine (planning, consultation)") }, { value: "stats", label: _("Statistiques") }] } } },
+          { name: "tab", selector: { select: { mode: "dropdown", options: [{ value: "week", label: _("Semaine") }, { value: "recipes", label: _("Recettes") }, { value: "ingredients", label: _("Ingrédients") }, { value: "shopping", label: _("Courses") }, { value: "reminders", label: _("Rappels") }, { value: "stats", label: _("Statistiques") }] } } }] },
+        { name: "today_slots", selector: { select: { multiple: true, mode: "list", options: [{ value: "midi", label: _("Midi") }, { value: "soir", label: _("Soir") }] } } },
         { name: "list_height", selector: { number: { min: 0, max: 2000, step: 20, mode: "box", unit_of_measurement: "px" } } },
         { name: "show_frame", selector: { boolean: {} } }];
       this._f.addEventListener("value-changed", (e) => {
@@ -1749,7 +2195,9 @@ class HolmMyMenuCardEditor extends HTMLElement {
 if (!customElements.get("holm-mymenu-card")) customElements.define("holm-mymenu-card", HolmMyMenuCard);
 if (!customElements.get("holm-mymenu-card-editor")) customElements.define("holm-mymenu-card-editor", HolmMyMenuCardEditor);
 window.customCards = window.customCards || [];
-if (!window.customCards.some((c) => c.type === "holm-mymenu-card"))
-  window.customCards.push({ type: "holm-mymenu-card", name: "HOLM – My Menu", description: "Menus de la semaine, recettes (Marmiton, Jow, Mealie), ingrédients (Open Food Facts) et liste de courses", preview: false });
+if (!window.customCards.some((c) => c.type === "holm-mymenu-card")) {
+  setLang(document.querySelector("home-assistant")?.hass);
+  window.customCards.push({ type: "holm-mymenu-card", name: "HOLM – My Menu", description: _("Menus de la semaine, recettes (Marmiton, Jow, Mealie), ingrédients (Open Food Facts) et liste de courses"), preview: false });
+}
 console.info(`%c HOLM-MYMENU %c ${VERSION} `, "background:#0abfbf;color:#0b1416;border-radius:3px 0 0 3px", "background:#123;color:#fff;border-radius:0 3px 3px 0");
 })();

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0
+- **8 langues** : traductions allemand, espagnol, italien, néerlandais, portugais et polonais ajoutées (configuration, options, entités, actions), en plus du français et de l'anglais. Carte HOLM My Menu traduite elle aussi (éditeur compris), avec une nouvelle option `language` ; elle suit sinon la langue du profil Home Assistant (anglais si la langue n'est pas traduite).
+- README en anglais (`README.en.md`).
+
 ## 1.1.9
 
 - **Liste de courses entre deux dates** ([#12](https://github.com/kaaribou/holm-mymenu/issues/12)) : dans l'onglet Courses, un choix **Semaine / Dates**. En mode Dates, choisissez **Du** et **Au** (31 jours au maximum) pour préparer par exemple un week-end prolongé du samedi au mardi, à cheval sur deux semaines.

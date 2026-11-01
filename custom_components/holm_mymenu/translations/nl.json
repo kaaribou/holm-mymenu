@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HOLM My Menu",
+        "description": "Recepten, ingrediënten, weekmenu's en boodschappenlijst.",
+        "data": {
+          "servings": "Standaard aantal personen"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "HOLM My Menu is al ingesteld."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opties van HOLM My Menu",
+        "description": "Het adres en token van Mealie worden alleen gebruikt om je Mealie-recepten te importeren (Mealie → Profiel → API-tokens).",
+        "data": {
+          "servings": "Standaard aantal personen",
+          "mealie_url": "Mealie-adres (bv. http://192.168.1.10:9925)",
+          "mealie_token": "Mealie API-token"
+        }
+      }
+    }
+  },
+  "telegram_shopping": {
+    "title": "Boodschappenlijst",
+    "generated": "Gemaakt op",
+    "unknown_quantity": "hoeveelheid niet opgegeven",
+    "eggs": "Eieren",
+    "potatoes": "Aardappelen",
+    "tomatoes": "Tomaten",
+    "part": "deel"
+  }
+}

@@ -4,6 +4,8 @@
 ![Version](https://img.shields.io/github/v/release/kaaribou/holm-mymenu)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.8%2B-03a9f4)
 
+🇫🇷 Français · [🇬🇧 English](README.en.md)
+
 **Les menus de la semaine, vos recettes et la liste de courses, directement dans Home Assistant.**
 
 HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en plus simple. Vous gardez vos recettes, vous planifiez le midi et le soir, et la liste de courses se fait toute seule. Les recettes viennent de **Marmiton**, de **Jow**, d'un simple lien ou de votre **Mealie**. Les produits viennent d'**Open Food Facts**, avec leur photo et leur fiche complète.
@@ -54,6 +56,12 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
 - 🔔 **Rappels programmables** : courses, menus, préparation des recettes ou message personnalisé ; envoi ponctuel, quotidien ou hebdomadaire par notification Home Assistant, Telegram ou e-mail.
 - 📄 **Import de recettes depuis un PDF texte** : lecture locale avec `pypdf`, sans service OCR ni serveur externe. Les PDF scannés sans texte sélectionnable ne sont pas pris en charge.
 - 🧩 **Capteurs** pour vos automatisations : menu du midi, menu du soir et prochain repas.
+
+
+### 🆕 Nouveautés de la 1.2.0
+
+- 🌍 **8 langues** : l'intégration (configuration, options, entités, actions) est traduite en français, anglais, allemand, espagnol, italien, néerlandais, portugais et polonais, selon la langue de Home Assistant. La carte **HOLM My Menu** aussi, éditeur compris ; son option `language` permet d'imposer une langue.
+- 🇬🇧 README en anglais.
 
 ---
 
@@ -133,6 +141,7 @@ type: custom:holm-mymenu-card
 | `today_slots` | `[midi]`, `[soir]`, `[midi, soir]` | les deux | Repas affichés, dans toutes les vues |
 | `list_height` | nombre (px), `0` = sans limite | `620` | Hauteur des listes de recettes et d'ingrédients sur ordinateur (sur mobile, c'est la page qui défile) ; la suite se charge au fil du défilement |
 | `show_frame` | `true` / `false` | `true` | Afficher le fond et le cadre de la carte |
+| `language` | `fr` · `en` · `de` · `es` · `it` · `nl` · `pt` · `pl` | langue du profil | Langue de la carte |
 
 Toutes ces options se règlent aussi dans l'éditeur visuel.
 
