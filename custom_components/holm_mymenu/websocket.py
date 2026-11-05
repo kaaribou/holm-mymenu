@@ -46,7 +46,7 @@ def async_register(hass: HomeAssistant) -> None:
                ws_shop_toggle, ws_shop_toggle_group, ws_shop_remove_group, ws_shop_remove, ws_shop_update, ws_aisle_create, ws_aisle_update, ws_aisle_delete, ws_shop_restore, ws_mealie_list, ws_mealie_import, ws_mealie_export, ws_contact_save, ws_contact_delete,
                ws_shop_send, ws_stats, ws_image_upload, ws_barcode, ws_mail_info, ws_calendar_export, ws_document_upload_start,
                ws_document_upload_chunk, ws_document_upload_finish, ws_document_upload_cancel,
-               ws_reminder_save, ws_reminder_delete, ws_reminder_test):
+               ws_reminder_save, ws_reminder_delete, ws_reminder_test, ws_plan_fill, ws_settings_avoid):
         websocket_api.async_register_command(hass, fn)
 
 
@@ -242,6 +242,27 @@ async def ws_plan_set(hass, connection, msg):
     store.set_slot(msg["day"], msg["slot"], msg["entries"])
     store.changed("plan")
     connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/plan/fill", vol.Required("items"): [vol.Schema({
+    vol.Required("day"): str, vol.Required("slot"): vol.In(SLOTS), vol.Required("recipe_id"): str, vol.Optional("servings"): vol.Any(int, None)})]})
+@websocket_api.async_response
+async def ws_plan_fill(hass, connection, msg):
+    """Remplit des repas vides avec les recettes suggérées par la carte (les repas déjà prévus ne sont jamais écrasés)."""
+    store = _store(hass)
+    n = store.fill_slots(msg["items"])
+    if n:
+        store.changed("plan")
+    connection.send_result(msg["id"], {"filled": n})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/settings/avoid", vol.Required("items"): [str]})
+@websocket_api.async_response
+async def ws_settings_avoid(hass, connection, msg):
+    store = _store(hass)
+    items = store.set_avoid(msg["items"])
+    store.changed("all")
+    connection.send_result(msg["id"], {"avoid": items})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/plan/add", vol.Required("day"): str, vol.Required("slot"): vol.In(SLOTS), vol.Required("entry"): _ENTRY})

@@ -58,7 +58,16 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
 - 🧩 **Capteurs** pour vos automatisations : menu du midi, menu du soir et prochain repas.
 
 
-### 🆕 Nouveautés de la 1.2.0
+### 🆕 Nouveautés de la 1.3.0
+
+- 📅 **Aujourd'hui et les 6 jours suivants** ([#13](https://github.com/kaaribou/holm-mymenu/issues/13)) : un bouton à côté de « Aujourd'hui » fait passer le planning de la semaine du lundi au dimanche à une vue qui commence aujourd'hui. Le choix est retenu par l'appareil ; l'option `week_start: today` en fait le réglage par défaut.
+- ✨ **Suggérer des repas** ([#15](https://github.com/kaaribou/holm-mymenu/issues/15)) : le bouton **Suggérer** de l'onglet Semaine remplit les repas vides avec **vos propres recettes**, sans doublon, en évitant celles des 14 derniers jours et en favorisant vos favorites. Chaque proposition se change d'un toucher (🎲) ou se retire avant de planifier. Les repas déjà prévus ne sont jamais remplacés.
+- 🔍 **Filtres de recettes** : catégorie, temps maximum et note minimum, dans l'onglet Recettes comme dans les suggestions (qui écartent par défaut les entrées et les desserts).
+- 🚫 **Ingrédients à éviter** dans les suggestions, partagés entre tous vos appareils. C'est un simple filtre sur le nom des ingrédients, pas une garantie : vérifiez toujours la recette en cas d'allergie.
+
+![Suggérer des repas](docs/images/suggerer.jpg)
+
+### Nouveautés de la 1.2.0
 
 - 🌍 **8 langues** : l'intégration (configuration, options, entités, actions) est traduite en français, anglais, allemand, espagnol, italien, néerlandais, portugais et polonais, selon la langue de Home Assistant. La carte **HOLM My Menu** aussi, éditeur compris ; son option `language` permet d'imposer une langue.
 - 🇬🇧 README en anglais.
@@ -139,6 +148,7 @@ type: custom:holm-mymenu-card
 | `view` | `full`, `today`, `week`, `stats` | `full` | **Complet** (gestion), **Menu du jour** ou **Semaine** (consultation), **Statistiques** |
 | `tab` | `week`, `recipes`, `ingredients`, `shopping`, `stats` | `week` | Onglet affiché à l'ouverture (vue complète) |
 | `today_slots` | `[midi]`, `[soir]`, `[midi, soir]` | les deux | Repas affichés, dans toutes les vues |
+| `week_start` | `monday`, `today` | `monday` | Planning du lundi au dimanche, ou à partir d'aujourd'hui (7 jours) ; le bouton de la carte permet de basculer |
 | `list_height` | nombre (px), `0` = sans limite | `620` | Hauteur des listes de recettes et d'ingrédients sur ordinateur (sur mobile, c'est la page qui défile) ; la suite se charge au fil du défilement |
 | `show_frame` | `true` / `false` | `true` | Afficher le fond et le cadre de la carte |
 | `language` | `fr` · `en` · `de` · `es` · `it` · `nl` · `pt` · `pl` | langue du profil | Langue de la carte |
@@ -159,6 +169,8 @@ Touchez un repas pour le remplir. Le champ de recherche propose en même temps :
 4. l'ajout d'un ingrédient ou d'une note libre.
 
 Dans la fenêtre d'un repas, les recettes, les ingrédients et les notes sont séparés. Un toucher ouvre le détail, et la flèche ← ramène au repas.
+
+**Suggérer** propose une recette pour chaque repas vide de la période affichée (à partir d'aujourd'hui), choisie parmi vos recettes selon les filtres (catégorie, temps, note, favoris) et les ingrédients à éviter. Changez une proposition avec 🎲, retirez-la avec ✕, puis **Planifier** : seuls les repas vides sont remplis.
 
 ### Vues « Menu du jour » et « Semaine »
 

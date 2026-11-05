@@ -59,6 +59,15 @@ HOLM My Menu is a **Home Assistant** integration designed as a simpler Mealie. Y
 - 📄 **Recipe import from a text PDF**: read locally with `pypdf`, no OCR service or external server. Scanned PDFs without selectable text aren't supported.
 - 🧩 **Sensors** for your automations: lunch menu, dinner menu and next meal.
 
+### 🆕 What's new in 1.3.0
+
+- 📅 **Today and the next 6 days** ([#13](https://github.com/kaaribou/holm-mymenu/issues/13)): a button next to "Today" switches the planner from the Monday-to-Sunday week to a view starting today. The choice is remembered by the device; the `week_start: today` option makes it the default.
+- ✨ **Suggest meals** ([#15](https://github.com/kaaribou/holm-mymenu/issues/15)): the **Suggest** button of the Week tab fills empty meals with **your own recipes**, without duplicates, avoiding those of the last 14 days and favouring your favourites. Each proposal can be changed with a tap (🎲) or removed before planning. Meals already planned are never replaced.
+- 🔍 **Recipe filters**: category, maximum time and minimum rating, in the Recipes tab and in the suggestions (which leave out starters and desserts by default).
+- 🚫 **Ingredients to avoid** in suggestions, shared across all your devices. It is a simple filter on ingredient names, not a guarantee: always check the recipe in case of allergy.
+
+![Suggest meals](docs/images/suggerer.jpg)
+
 ---
 
 ## Contents
@@ -135,6 +144,7 @@ type: custom:holm-mymenu-card
 | `view` | `full`, `today`, `week`, `stats` | `full` | **Full** (management), **Today's menu** or **Week** (view only), **Statistics** |
 | `tab` | `week`, `recipes`, `ingredients`, `shopping`, `stats` | `week` | Tab shown on opening (full view) |
 | `today_slots` | `[midi]`, `[soir]`, `[midi, soir]` | both | Meals shown (`midi` = lunch, `soir` = dinner), in every view |
+| `week_start` | `monday`, `today` | `monday` | Planner from Monday to Sunday, or starting today (7 days); the card's button switches between them |
 | `list_height` | number (px), `0` = no limit | `620` | Height of the recipe and ingredient lists on a computer (on mobile, the page scrolls); more items load as you scroll |
 | `show_frame` | `true` / `false` | `true` | Show the card background and frame |
 | `language` | `fr` · `en` · `de` · `es` · `it` · `nl` · `pt` · `pl` | profile language | Card language |
@@ -155,6 +165,8 @@ Tap a meal to fill it. The search field offers at the same time:
 4. adding an ingredient or a free note.
 
 In a meal's window, recipes, ingredients and notes are kept apart. A tap opens the details, and the ← arrow takes you back to the meal.
+
+**Suggest** proposes a recipe for each empty meal of the period shown (from today on), picked among your recipes according to the filters (category, time, rating, favourites) and the ingredients to avoid. Change a proposal with 🎲, remove it with ✕, then **Plan**: only empty meals are filled.
 
 ### "Today's menu" and "Week" views
 

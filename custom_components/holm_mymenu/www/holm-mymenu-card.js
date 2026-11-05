@@ -3,6 +3,7 @@
  *   type: custom:holm-mymenu-card
  *   title: Menus            view: full | today | week | stats        tab: week | recipes | ingredients | shopping | stats
  *   today_slots: [midi, soir]   list_height: 620   show_frame: false
+ *   week_start: monday | today   (semaine du lundi, ou aujourd'hui + 6 jours)
  */
 (() => {
   // ---- HOLM i18n : textes écrits en français, traduits à l'affichage (en, de, es, it, nl, pt, pl) ----
@@ -11,6 +12,36 @@
   const LANG_NAMES = { fr: "Français", en: "English", de: "Deutsch", es: "Español", it: "Italiano", nl: "Nederlands", pt: "Português", pl: "Polski" };
   const LOCALES = { fr: "fr-FR", en: "en-GB", de: "de-DE", es: "es-ES", it: "it-IT", nl: "nl-NL", pt: "pt-PT", pl: "pl-PL" };
   const I18N = {
+    "Du {a} au {b}": ["From {a} to {b}", "Vom {a} bis {b}", "Del {a} al {b}", "Dal {a} al {b}", "Van {a} tot {b}", "De {a} a {b}", "Od {a} do {b}"],
+    "Afficher aujourd'hui et les 6 jours suivants": ["Show today and the next 6 days", "Heute und die nächsten 6 Tage anzeigen", "Mostrar hoy y los 6 días siguientes", "Mostra oggi e i 6 giorni successivi", "Vandaag en de volgende 6 dagen tonen", "Mostrar hoje e os 6 dias seguintes", "Pokaż dziś i 6 kolejnych dni"],
+    "Afficher la semaine du lundi au dimanche": ["Show the week from Monday to Sunday", "Woche von Montag bis Sonntag anzeigen", "Mostrar la semana de lunes a domingo", "Mostra la settimana da lunedì a domenica", "Week van maandag tot zondag tonen", "Mostrar a semana de segunda a domingo", "Pokaż tydzień od poniedziałku do niedzieli"],
+    "Début du planning": ["Planning starts on", "Planungsbeginn", "Inicio de la planificación", "Inizio della pianificazione", "Begin van de planning", "Início do planeamento", "Początek planu"],
+    "Lundi (semaine en cours)": ["Monday (current week)", "Montag (aktuelle Woche)", "Lunes (semana actual)", "Lunedì (settimana corrente)", "Maandag (huidige week)", "Segunda-feira (semana atual)", "Poniedziałek (bieżący tydzień)"],
+    "Aujourd'hui (7 prochains jours)": ["Today (next 7 days)", "Heute (nächste 7 Tage)", "Hoy (próximos 7 días)", "Oggi (prossimi 7 giorni)", "Vandaag (volgende 7 dagen)", "Hoje (próximos 7 dias)", "Dziś (następne 7 dni)"],
+    "Suggérer": ["Suggest", "Vorschlagen", "Sugerir", "Suggerisci", "Voorstellen", "Sugerir", "Zaproponuj"],
+    "Suggérer des repas": ["Suggest meals", "Mahlzeiten vorschlagen", "Sugerir comidas", "Suggerisci pasti", "Maaltijden voorstellen", "Sugerir refeições", "Zaproponuj posiłki"],
+    "Repas à remplir": ["Meals to fill", "Zu füllende Mahlzeiten", "Comidas por rellenar", "Pasti da riempire", "In te vullen maaltijden", "Refeições a preencher", "Posiłki do uzupełnienia"],
+    "Plats (sans entrées ni desserts)": ["Mains (no starters or desserts)", "Hauptgerichte (ohne Vorspeisen und Desserts)", "Platos (sin entrantes ni postres)", "Piatti (senza antipasti né dolci)", "Hoofdgerechten (zonder voorgerechten en desserts)", "Pratos (sem entradas nem sobremesas)", "Dania (bez przystawek i deserów)"],
+    "Toutes": ["All", "Alle", "Todas", "Tutte", "Alle", "Todas", "Wszystkie"],
+    "Tous": ["All", "Alle", "Todos", "Tutti", "Alle", "Todos", "Wszystkie"],
+    "Temps max": ["Max time", "Max. Zeit", "Tiempo máx.", "Tempo max", "Max. tijd", "Tempo máx.", "Maks. czas"],
+    "Note min": ["Min rating", "Min. Bewertung", "Nota mín.", "Voto min", "Min. score", "Nota mín.", "Min. ocena"],
+    "Favoris uniquement": ["Favourites only", "Nur Favoriten", "Solo favoritos", "Solo preferiti", "Alleen favorieten", "Só favoritos", "Tylko ulubione"],
+    "Ingrédients à éviter": ["Ingredients to avoid", "Zu vermeidende Zutaten", "Ingredientes a evitar", "Ingredienti da evitare", "Te vermijden ingrediënten", "Ingredientes a evitar", "Składniki do unikania"],
+    "Ajouter un ingrédient à éviter…": ["Add an ingredient to avoid…", "Zu vermeidende Zutat hinzufügen…", "Añadir un ingrediente a evitar…", "Aggiungi un ingrediente da evitare…", "Te vermijden ingrediënt toevoegen…", "Adicionar um ingrediente a evitar…", "Dodaj składnik do unikania…"],
+    "Simple filtre sur le nom des ingrédients : vérifiez toujours la recette en cas d'allergie.": ["A simple filter on ingredient names: always check the recipe in case of allergy.", "Einfacher Filter nach Zutatennamen: Bei Allergien das Rezept immer prüfen.", "Simple filtro por el nombre de los ingredientes: compruebe siempre la receta en caso de alergia.", "Semplice filtro sul nome degli ingredienti: in caso di allergia controllate sempre la ricetta.", "Eenvoudige filter op ingrediëntnamen: controleer bij allergie altijd het recept.", "Simples filtro pelo nome dos ingredientes: verifique sempre a receita em caso de alergia.", "Prosty filtr nazw składników: przy alergii zawsze sprawdź przepis."],
+    "{n} recettes possibles": ["{n} possible recipes", "{n} mögliche Rezepte", "{n} recetas posibles", "{n} ricette possibili", "{n} mogelijke recepten", "{n} receitas possíveis", "{n} możliwych przepisów"],
+    "Autre recette": ["Another recipe", "Anderes Rezept", "Otra receta", "Altra ricetta", "Ander recept", "Outra receita", "Inny przepis"],
+    "Ne pas remplir": ["Leave empty", "Leer lassen", "Dejar vacío", "Lascia vuoto", "Leeg laten", "Deixar vazio", "Zostaw puste"],
+    "Tout regénérer": ["Regenerate all", "Alles neu erzeugen", "Regenerar todo", "Rigenera tutto", "Alles opnieuw", "Regenerar tudo", "Wygeneruj wszystko ponownie"],
+    "Planifier {n} repas": ["Plan {n} meals", "{n} Mahlzeiten planen", "Planificar {n} comidas", "Pianifica {n} pasti", "{n} maaltijden plannen", "Planear {n} refeições", "Zaplanuj posiłki: {n}"],
+    "{n} repas planifiés": ["{n} meals planned", "{n} Mahlzeiten geplant", "{n} comidas planificadas", "{n} pasti pianificati", "{n} maaltijden gepland", "{n} refeições planeadas", "Zaplanowano posiłki: {n}"],
+    "Aucun repas vide à remplir sur cette période.": ["No empty meal to fill in this period.", "Keine leere Mahlzeit in diesem Zeitraum.", "No hay comidas vacías en este periodo.", "Nessun pasto vuoto da riempire in questo periodo.", "Geen lege maaltijd in deze periode.", "Nenhuma refeição vazia neste período.", "Brak pustych posiłków w tym okresie."],
+    "Aucune recette ne correspond à ces critères.": ["No recipe matches these criteria.", "Kein Rezept entspricht diesen Kriterien.", "Ninguna receta cumple estos criterios.", "Nessuna ricetta corrisponde a questi criteri.", "Geen recept voldoet aan deze criteria.", "Nenhuma receita corresponde a estes critérios.", "Żaden przepis nie spełnia tych kryteriów."],
+    "Seuls les repas vides sont remplis : rien de déjà prévu n'est remplacé.": ["Only empty meals are filled: nothing already planned is replaced.", "Nur leere Mahlzeiten werden gefüllt: bereits Geplantes wird nicht ersetzt.", "Solo se rellenan las comidas vacías: no se sustituye nada ya previsto.", "Vengono riempiti solo i pasti vuoti: nulla di già previsto viene sostituito.", "Alleen lege maaltijden worden gevuld: niets wat al gepland is wordt vervangen.", "Só as refeições vazias são preenchidas: nada já previsto é substituído.", "Uzupełniane są tylko puste posiłki: nic już zaplanowanego nie jest zastępowane."],
+    "Filtres": ["Filters", "Filter", "Filtros", "Filtri", "Filters", "Filtros", "Filtry"],
+    "Effacer les filtres": ["Clear filters", "Filter löschen", "Borrar filtros", "Cancella filtri", "Filters wissen", "Limpar filtros", "Wyczyść filtry"],
+    "≤ {n} min": ["≤ {n} min", "≤ {n} Min.", "≤ {n} min", "≤ {n} min", "≤ {n} min", "≤ {n} min", "≤ {n} min"],
     "Automatique (profil)": ["Automatic (profile)", "Automatisch (Profil)", "Automático (perfil)", "Automatica (profilo)", "Automatisch (profiel)", "Automático (perfil)", "Automatycznie (profil)"],
     "Langue": ["Language", "Sprache", "Idioma", "Lingua", "Taal", "Idioma", "Język"],
     "Titre": ["Title", "Titel", "Título", "Titolo", "Titel", "Título", "Tytuł"],
@@ -446,7 +477,7 @@
     if (o.selector && o.selector.select && o.name !== "language") o.selector = { ...o.selector, select: { ...o.selector.select, options: (o.selector.select.options || []).map((op) => (typeof op === "string" ? op : { ...op, label: _(op.label) })) } };
     if (o.name === "language" && o.selector && o.selector.select) o.selector = { ...o.selector, select: { ...o.selector.select, options: o.selector.select.options.map((op) => (op.value ? op : { ...op, label: _("Automatique (profil)") })) } };
     return o; });
-const VERSION = "1.2.0";
+const VERSION = "1.3.0";
 // Shared by the Telegram sharing dialog and the calendar export dialog.
 const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v == null ? d : v; } catch (_) { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
@@ -468,6 +499,8 @@ const mins = (m) => (!m ? "" : m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? Stri
 const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const _T = (o) => new Proxy(o, { get: (t, k) => { const v = t[k]; return typeof v === "string" ? _(v) : v && typeof v === "object" ? _T(v) : v; } });
 const SLOT_LBL = _T({ midi: _("Midi"), soir: _("Soir") });
+// catégories écartées par défaut des suggestions de repas (entrées, desserts, accompagnements…)
+const NOT_MAIN = /entree|dessert|accompagnement|aperitif|boisson|sauce|petit[- ]?dej|gouter|condiment|starter|side|drink|snack/;
 const NUTRI = { a: "#038141", b: "#85bb2f", c: "#fecb02", d: "#ee8100", e: "#e63e11" };
 const fq = (q) => { if (q == null) return ""; const r = Math.round(q * 100) / 100; return (r === Math.floor(r) ? String(r) : String(r).replace(".", ",")); };
 
@@ -507,10 +540,21 @@ class HolmMyMenuCard extends HTMLElement {
   setConfig(c) {
     this._c = { title: "Menus", view: "full", tab: "week", ...c };
     this._tab = this._tab || this._c.tab;
-    this._week = this._week || monday(new Date());
+    if (this._rolling === undefined) this._rolling = load("holm-mymenu-rolling", null) ?? (this._c.week_start === "today");
+    this._week = this._week || this._start(new Date());
+    if (!this._rf) this._rf = { cat: "", time: 0, rating: 0, ...load("holm-mymenu-rfilters", {}) };
     this._q = this._q || { recipes: "", ingredients: "" };
     this._lim = { recipes: 12, ingredients: 36 };
     if (this.shadowRoot && !this._editingRecipe && !this._editingReminder) this._render();
+  }
+  // début de la période affichée : lundi de la semaine, ou le jour même (« 7 prochains jours », #13)
+  _start(d) { if (!this._rolling) return monday(d); const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+  _wkLabel(w0, w1) {
+    const a = fdate(w0, { day: "numeric", month: w0.getMonth() === w1.getMonth() ? undefined : "short" }), b = fdate(w1, { day: "numeric", month: "long" });
+    return this._rolling ? _("Du {a} au {b}", { a, b }) : _("Semaine du {a} au {b}", { a, b });
+  }
+  _modeBtn() {
+    return `<button class="ib wm ${this._rolling ? "act" : ""}" data-act="week-mode" title="${this._rolling ? _("Afficher la semaine du lundi au dimanche") : _("Afficher aujourd'hui et les 6 jours suivants")}"><ha-icon icon="${this._rolling ? "mdi:calendar-arrow-right" : "mdi:calendar-week"}"></ha-icon></button>`;
   }
   set hass(h) {
     const _pl = this._lang;
@@ -632,7 +676,12 @@ class HolmMyMenuCard extends HTMLElement {
     switch (a) {
       case "week-prev": this._week = addDays(this._week, -7); return this._render();
       case "week-next": this._week = addDays(this._week, 7); return this._render();
-      case "week-now": this._week = monday(new Date()); return this._render();
+      case "week-now": this._week = this._start(new Date()); return this._render();
+      case "week-mode": this._rolling = !this._rolling; save("holm-mymenu-rolling", this._rolling); this._week = this._start(new Date()); return this._render();
+      case "suggest": return this._suggestModal();
+      case "rf-toggle": this._rfOpen = !this._rfOpen; return this._render();
+      case "rf": { const v = el.value; this._rf[d.k] = d.k === "cat" ? v : Number(v) || 0; save("holm-mymenu-rfilters", this._rf); this._lim.recipes = 12; return this._render(); }
+      case "rf-clear": this._rf = { cat: "", time: 0, rating: 0 }; save("holm-mymenu-rfilters", this._rf); this._lim.recipes = 12; return this._render();
       case "calendar-export": return this._calendarModal();
       case "slot": return this._slotModal(d.day, d.slot);
       case "recipe": return this._recipeModal(d.id);
@@ -711,9 +760,11 @@ class HolmMyMenuCard extends HTMLElement {
     const days = [...Array(7)].map((_, i) => addDays(w0, i));
     const w1 = days[6];
     return `<div class="bar"><button class="ib" data-act="week-prev"><ha-icon icon="mdi:chevron-left"></ha-icon></button>
-        <div class="wk">${_("Semaine du {a} au {b}", { a: fdate(w0, { day: "numeric", month: w0.getMonth() === w1.getMonth() ? undefined : "short" }), b: fdate(w1, { day: "numeric", month: "long" }) })}</div>
+        <div class="wk">${this._wkLabel(w0, w1)}</div>
         <button class="ib" data-act="week-next"><ha-icon icon="mdi:chevron-right"></ha-icon></button>
         <button class="pill" data-act="week-now">${_("Aujourd'hui")}</button>
+        ${this._modeBtn()}
+        <button class="pill" data-act="suggest"><ha-icon icon="mdi:auto-fix"></ha-icon>${_("Suggérer")}</button>
         <button class="pill" data-act="calendar-export"><ha-icon icon="mdi:calendar-plus"></ha-icon>${_("Ajouter au calendrier")}</button></div>
       <div class="week">${days.map((d) => { const k = iso(d); return `<div class="day ${k === today ? "today" : ""} ${k < today ? "past" : ""}">
           <div class="dn"><b>${fdate(d, { weekday: "short" })}</b><span>${d.getDate()}</span></div>
@@ -749,9 +800,10 @@ class HolmMyMenuCard extends HTMLElement {
     const w0 = this._week, today = iso(new Date()), slots = this._viewSlots();
     const days = [...Array(7)].map((_, i) => addDays(w0, i)), w1 = days[6];
     return `<div class="bar"><button class="ib" data-act="week-prev"><ha-icon icon="mdi:chevron-left"></ha-icon></button>
-        <div class="wk">${_("Semaine du {a} au {b}", { a: fdate(w0, { day: "numeric", month: w0.getMonth() === w1.getMonth() ? undefined : "short" }), b: fdate(w1, { day: "numeric", month: "long" }) })}</div>
+        <div class="wk">${this._wkLabel(w0, w1)}</div>
         <button class="ib" data-act="week-next"><ha-icon icon="mdi:chevron-right"></ha-icon></button>
-        ${iso(w0) === iso(monday(new Date())) ? "" : `<button class="pill" data-act="week-now">${_("Aujourd'hui")}</button>`}
+        ${iso(w0) === iso(this._start(new Date())) ? "" : `<button class="pill" data-act="week-now">${_("Aujourd'hui")}</button>`}
+        ${this._modeBtn()}
         <button class="pill" data-act="calendar-export"><ha-icon icon="mdi:calendar-plus"></ha-icon>${_("Ajouter au calendrier")}</button></div>
       <div class="weekro n${slots.length}">${days.map((d) => { const k = iso(d); return `<div class="rday ${k === today ? "today" : ""} ${k < today ? "past" : ""}">
           <div class="rdn"><b>${fdate(d, { weekday: "long" })}</b><span>${d.getDate()}</span></div>
@@ -776,7 +828,7 @@ class HolmMyMenuCard extends HTMLElement {
       }
     }
     const mb = this._modal(_("Ajouter les recettes au calendrier"), `
-      <div class="muted">${_("Semaine du {a} au {b}", { a: esc(fdate(w0, { day: "numeric", month: "long" })), b: esc(fdate(addDays(w0, 6), { day: "numeric", month: "long" })) })}</div>
+      <div class="muted">${esc(this._wkLabel(w0, addDays(w0, 6)))}</div>
       <div class="sh" style="margin-top:14px">${_("Calendrier de destination")}</div>
       <select class="f cal-target" style="width:100%">
         <option value="">${_("Choisir un calendrier…")}</option>
@@ -860,13 +912,35 @@ class HolmMyMenuCard extends HTMLElement {
   _recipesView() {
     return `<div class="bar"><input class="search" data-k="recipes" placeholder="${_("Rechercher une recette ou un ingrédient…")}" value="${esc(this._q.recipes)}">
         <button class="ib ${this._favOnly ? "on" : ""}" data-act="fav-filter" title="${_("Favoris")}"><ha-icon icon="mdi:heart${this._favOnly ? "" : "-outline"}"></ha-icon></button>
+        <button class="ib wm ${this._rfOpen || this._rfActive() ? "act" : ""}" data-act="rf-toggle" title="${_("Filtres")}"><ha-icon icon="mdi:filter-variant"></ha-icon></button>
         <button class="pill main" data-act="add-recipe"><ha-icon icon="mdi:plus"></ha-icon>${_("Ajouter")}</button></div>
+      ${this._rfOpen || this._rfActive() ? `<div class="rfbar">${this._filterFields(this._rf, "rf")}${this._rfActive() ? `<button class="lnk" data-act="rf-clear">${_("Effacer les filtres")}</button>` : ""}</div>` : ""}
       <div class="lst">${this._recipesList()}</div>`;
+  }
+  _rfActive() { const f = this._rf || {}; return !!(f.cat || f.time || f.rating); }
+  // durée d'une recette en minutes : total, sinon préparation + cuisson (0 = inconnue)
+  _rtime(r) { return Number(r.total) || (Number(r.prep) || 0) + (Number(r.cook) || 0); }
+  _cats() { return [...new Set(Object.values(this._s.recipes).map((r) => String(r.category || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, LANG)); }
+  // champs de filtre partagés par la liste des recettes et la fenêtre « Suggérer »
+  _filterFields(f, act, withMain) {
+    const sel = (k, opts, v) => `<select class="f rff" data-act="${act}" data-ev="change" data-k="${k}">${opts.map(([val, l]) => `<option value="${esc(val)}" ${String(v) === String(val) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+    return `<label><span>${_("Catégorie")}</span>${sel("cat", [...(withMain ? [["__main", _("Plats (sans entrées ni desserts)")]] : []), ["", _("Toutes")], ...this._cats().map((c) => [c, c])], f.cat)}</label>
+      <label><span>${_("Temps max")}</span>${sel("time", [[0, _("Tous")], ...[15, 30, 45, 60, 90].map((n) => [n, _("≤ {n} min", { n })])], f.time || 0)}</label>
+      <label><span>${_("Note min")}</span>${sel("rating", [[0, _("Toutes")], [4, "≥ 4"], [4.5, "≥ 4,5"]], f.rating || 0)}</label>`;
+  }
+  _matchFilters(r, f) {
+    if (f.cat === "__main") { if (NOT_MAIN.test(norm(r.category))) return false; }
+    else if (f.cat && String(r.category || "").trim() !== f.cat) return false;
+    if (f.time) { const t = this._rtime(r); if (!t || t > f.time) return false; }
+    if (f.rating && !(Number(r.rating) >= f.rating)) return false;
+    if (f.fav && !r.favorite) return false;
+    return true;
   }
   _recipesList() {
     const s = this._s, q = norm(this._q.recipes);
     let list = Object.values(s.recipes).filter((r) => !q || norm(r.name).includes(q) || (r.ingredients || []).some((l) => norm(l.name).includes(q)));
     if (this._favOnly) list = list.filter((r) => r.favorite);
+    if (this._rfActive()) list = list.filter((r) => this._matchFilters(r, this._rf));
     list.sort((a, b) => (b.favorite - a.favorite) || a.name.localeCompare(b.name, LANG));
     const total = list.length, more = total - this._lim.recipes;
     list = list.slice(0, this._lim.recipes);
@@ -874,7 +948,7 @@ class HolmMyMenuCard extends HTMLElement {
           <div class="ri" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}>${r.image ? "" : `<ha-icon icon="mdi:chef-hat"></ha-icon>`}${r.favorite ? `<i class="fav"><ha-icon icon="mdi:heart"></ha-icon></i>` : ""}</div>
           <div class="rn">${esc(r.name)}</div>
           <div class="rm">${r.total ? `<span><ha-icon icon="mdi:clock-outline"></ha-icon>${mins(r.total)}</span>` : ""}<span><ha-icon icon="mdi:account-multiple-outline"></ha-icon>${r.servings}</span>${r.rating ? `<span><ha-icon icon="mdi:star"></ha-icon>${fq(r.rating)}</span>` : ""}</div></div>`).join("")}</div>${this._moreHtml(more, total)}`
-      : `<div class="empty">${q ? _("Aucune recette ne correspond.") : _("Aucune recette pour l'instant : ajoutez-en depuis Marmiton, Jow, un lien, Mealie ou à la main.")}</div>`}`;
+      : `<div class="empty">${q || this._rfActive() || this._favOnly ? _("Aucune recette ne correspond.") : _("Aucune recette pour l'instant : ajoutez-en depuis Marmiton, Jow, un lien, Mealie ou à la main.")}</div>`}`;
   }
 
   // ---------------- Ingrédients ----------------
@@ -1291,6 +1365,99 @@ class HolmMyMenuCard extends HTMLElement {
   }
   _close() { this._editingRecipe = false; this._editingReminder = false; const r = this.shadowRoot.querySelector(".modal-root"); if (r) r.remove(); this._refresher = null; }
   _refreshModal() { if (this._refresher) this._refresher(); }
+
+  // ----- « Suggérer » : remplit les repas vides avec ses propres recettes (#15) -----
+  _suggestModal() {
+    const st = this._sg = { avoid: [...(this._s.settings?.avoid || [])], slots: this._viewSlots(), f: { cat: "__main", time: 0, rating: 0, fav: false, ...load("holm-mymenu-sgfilters", {}) }, picks: {} };
+    const s = () => this._s;
+    const today = iso(new Date());
+    const holes = () => {
+      const out = [];
+      for (let i = 0; i < 7; i++) {
+        const k = iso(addDays(this._week, i));
+        if (k < today) continue;
+        for (const sl of st.slots) if (!((s().plan[k] || {})[sl] || []).length) out.push(`${k}|${sl}`);
+      }
+      return out;
+    };
+    const pool = () => {
+      const avoid = st.avoid.map(norm).filter(Boolean);
+      return Object.values(s().recipes).filter((r) => this._matchFilters(r, st.f)
+        && !avoid.some((a) => norm(r.name).includes(a) || (r.ingredients || []).some((l) => norm(l.name).includes(a) || norm((s().ingredients[l.ingredient_id] || {}).name).includes(a))));
+    };
+    // recettes déjà prévues sur la période ou dans les 14 jours précédents : évitées si possible
+    const recent = () => {
+      const set = new Set(), from = iso(addDays(this._week, -14)), to = iso(addDays(this._week, 6));
+      for (const [k, d] of Object.entries(s().plan)) if (k >= from && k <= to) for (const es of Object.values(d)) for (const e of es) if (e.type === "recipe") set.add(e.recipe_id);
+      return set;
+    };
+    const pick = (cands, used) => {
+      const rec = recent();
+      let c = cands.filter((r) => !used.has(r.id) && !rec.has(r.id));
+      if (!c.length) c = cands.filter((r) => !used.has(r.id));
+      if (!c.length) return null;
+      const w = c.map((r) => 1 + (r.favorite ? 2 : 0) + Math.log1p((s().history || {})[r.id] || 0) + (Number(r.rating) >= 4.5 ? 0.5 : 0));
+      let x = Math.random() * w.reduce((a, b) => a + b, 0);
+      for (let i = 0; i < c.length; i++) { x -= w[i]; if (x <= 0) return c[i]; }
+      return c[c.length - 1];
+    };
+    const regen = (only) => {
+      const cands = pool(), keys = holes();
+      const used = new Set(Object.entries(st.picks).filter(([k, v]) => v && keys.includes(k) && (only ? k !== only : false)).map(([, v]) => v));
+      for (const k of keys) {
+        if (only && k !== only) continue;
+        if (st.picks[k] === null && !only) continue; // « ne pas remplir » conservé
+        const r = pick(cands, used); st.picks[k] = r ? r.id : undefined; if (r) used.add(r.id);
+      }
+      for (const k of Object.keys(st.picks)) if (!keys.includes(k)) delete st.picks[k];
+    };
+    const draw = () => {
+      const keys = holes(), n = pool().length;
+      const chosen = keys.filter((k) => st.picks[k]);
+      const avoid = st.avoid;
+      const names = [...new Set(Object.values(s().ingredients).map((i) => i.name))].sort((a, b) => a.localeCompare(b, LANG));
+      const mb = this._modal(_("Suggérer des repas"), `
+        <div class="muted">${esc(this._wkLabel(this._week, addDays(this._week, 6)))} · ${_("Seuls les repas vides sont remplis : rien de déjà prévu n'est remplacé.")}</div>
+        <div class="sh" style="margin-top:12px">${_("Repas à remplir")}</div>
+        <div class="chips">${s().slots.map((sl) => `<button class="chip sgs ${st.slots.includes(sl) ? "on" : ""}" data-sl="${sl}">${SLOT_LBL[sl]}</button>`).join("")}
+          <button class="chip sgfav ${st.f.fav ? "on" : ""}"><ha-icon icon="mdi:heart${st.f.fav ? "" : "-outline"}"></ha-icon>${_("Favoris uniquement")}</button></div>
+        <div class="rfbar sg">${this._filterFields(st.f, "sgf", true)}</div>
+        <div class="sh" style="margin-top:12px">${_("Ingrédients à éviter")}</div>
+        <div class="chips">${avoid.map((a, i) => `<span class="chip av">${esc(a)}<button class="avx" data-i="${i}">✕</button></span>`).join("")}
+          <input class="f avin" list="sg-ings" placeholder="${_("Ajouter un ingrédient à éviter…")}" style="flex:1 1 180px"><datalist id="sg-ings">${names.map((x) => `<option value="${esc(x)}">`).join("")}</datalist></div>
+        <div class="muted" style="margin-top:4px">${_("Simple filtre sur le nom des ingrédients : vérifiez toujours la recette en cas d'allergie.")}</div>
+        <div class="sh" style="margin-top:14px">${_("{n} recettes possibles", { n })}<button class="lnk sgall">${_("Tout regénérer")}</button></div>
+        ${!keys.length ? `<div class="muted">${_("Aucun repas vide à remplir sur cette période.")}</div>` : !n ? `<div class="muted">${_("Aucune recette ne correspond à ces critères.")}</div>` : `<div class="sglist">${keys.map((k) => {
+          const [day, sl] = k.split("|"), r = st.picks[k] ? s().recipes[st.picks[k]] : null;
+          return `<div class="sgl ${r ? "" : "off"}"><div class="sgd"><b>${esc(fdate(new Date(day + "T12:00:00"), { weekday: "short", day: "numeric" }))}</b><small>${SLOT_LBL[sl]}</small></div>
+            <div class="sgi" ${r && r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}>${r && r.image ? "" : `<ha-icon icon="mdi:chef-hat"></ha-icon>`}</div>
+            <div class="sgn">${r ? `<b>${esc(r.name)}</b><small>${[this._rtime(r) ? mins(this._rtime(r)) : "", r.category || ""].filter(Boolean).map(esc).join(" · ")}</small>` : `<i class="muted">${_("Ne pas remplir")}</i>`}</div>
+            <button class="ib sgre" data-k="${k}" title="${_("Autre recette")}"><ha-icon icon="mdi:dice-multiple-outline"></ha-icon></button>
+            <button class="ib sgno" data-k="${k}" title="${_("Ne pas remplir")}"><ha-icon icon="mdi:close"></ha-icon></button></div>`; }).join("")}</div>`}
+        <div class="mf"><button class="pill sgcancel">${_("Annuler")}</button><button class="pill main sgok" ${chosen.length ? "" : "disabled"}><ha-icon icon="mdi:calendar-check"></ha-icon>${_("Planifier {n} repas", { n: chosen.length })}</button></div>`, { wide: true });
+      const q = (sel) => mb.querySelectorAll(sel);
+      q(".sgs").forEach((b) => b.addEventListener("click", () => { const sl = b.dataset.sl; st.slots = st.slots.includes(sl) ? st.slots.filter((x) => x !== sl) : [...st.slots, sl]; regen(); draw(); }));
+      q(".sgfav").forEach((b) => b.addEventListener("click", () => { st.f.fav = !st.f.fav; save("holm-mymenu-sgfilters", st.f); st.picks = {}; regen(); draw(); }));
+      q('select[data-act="sgf"]').forEach((el) => el.addEventListener("change", () => { const k = el.dataset.k; st.f[k] = k === "cat" ? el.value : Number(el.value) || 0; save("holm-mymenu-sgfilters", st.f); st.picks = {}; regen(); draw(); }));
+      q(".sgre").forEach((b) => b.addEventListener("click", () => { regen(b.dataset.k); draw(); }));
+      q(".sgno").forEach((b) => b.addEventListener("click", () => { st.picks[b.dataset.k] = null; draw(); }));
+      q(".sgall").forEach((b) => b.addEventListener("click", () => { st.picks = {}; regen(); draw(); }));
+      const setAvoid = (list) => { st.avoid = list; st.picks = {}; regen(); draw(); this._do(this._ws("settings/avoid", { items: list })).catch(() => {}); };
+      q(".avx").forEach((b) => b.addEventListener("click", () => setAvoid(avoid.filter((_x, i) => i !== Number(b.dataset.i)))));
+      q(".avin").forEach((inp) => {
+        inp.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter" && inp.value.trim()) setAvoid([...avoid, inp.value.trim()]); });
+        inp.addEventListener("change", () => { if (inp.value.trim() && names.includes(inp.value.trim())) setAvoid([...avoid, inp.value.trim()]); });
+      });
+      q(".sgcancel").forEach((b) => b.addEventListener("click", () => this._close()));
+      q(".sgok").forEach((b) => b.addEventListener("click", async () => {
+        const items = holes().filter((k) => st.picks[k]).map((k) => { const [day, slot] = k.split("|"); return { day, slot, recipe_id: st.picks[k] }; });
+        b.disabled = true;
+        try { const r = await this._ws("plan/fill", { items }); this._close(); this._toast(_("{n} repas planifiés", { n: (r && r.filled) ?? items.length })); }
+        catch (e) { b.disabled = false; this._toast(`HOLM My Menu : ${(e && e.message) || e}`); }
+      }));
+    };
+    regen(); draw();
+  }
 
   // ----- créneau -----
   _slotModal(day, slot) {
@@ -1934,6 +2101,22 @@ button { font:inherit; color:inherit; cursor:pointer; }
 .wk.dates small { color:var(--secondary-text-color); font-size:12px; } .wk.dates small.bad { color:var(--error-color, #e57373); }
 .ib { width:34px; height:34px; border-radius:10px; border:0; background:var(--sf); display:grid; place-items:center; flex:none; }
 .ib.on { color:#e05a8a; }
+.ib.wm.act { color:var(--ac); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--ac) 55%, transparent); }
+.rfbar { display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px 10px; margin:-2px 0 10px; }
+.rfbar label { display:flex; flex-direction:column; gap:3px; flex:1 1 130px; min-width:0; font-size:11.5px; color:var(--secondary-text-color); }
+.rfbar .f { padding:7px 10px; font-size:13px; }
+.rfbar.sg { margin:10px 0 0; }
+.chip.on { border-color:var(--ac); background:color-mix(in srgb, var(--ac) 16%, transparent); }
+.chip ha-icon { --mdc-icon-size:15px; vertical-align:-3px; margin-right:4px; }
+button.chip { cursor:pointer; font:inherit; font-size:12.5px; color:var(--primary-text-color); }
+.chip.av { display:inline-flex; align-items:center; gap:6px; } .avx { border:0; background:none; color:var(--secondary-text-color); cursor:pointer; padding:0; font-size:12px; }
+.sglist { display:flex; flex-direction:column; gap:6px; max-height:46vh; overflow:auto; }
+.sgl { display:flex; align-items:center; gap:10px; padding:6px; border-radius:12px; background:var(--sf); }
+.sgl.off { opacity:.6; }
+.sgd { display:flex; flex-direction:column; width:62px; flex:none; font-size:12.5px; text-transform:capitalize; } .sgd small { color:var(--secondary-text-color); }
+.sgi { width:44px; height:44px; border-radius:10px; flex:none; background:var(--bd) center/cover; display:grid; place-items:center; color:var(--secondary-text-color); }
+.sgn { flex:1; min-width:0; display:flex; flex-direction:column; } .sgn b { font-size:13.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .sgn small { font-size:11.5px; color:var(--secondary-text-color); }
+.mf { display:flex; justify-content:flex-end; gap:8px; margin-top:14px; }
 .ib ha-icon { --mdc-icon-size:20px; }
 .pill { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--bd); background:var(--sf); padding:7px 12px; border-radius:11px; font-size:13px; font-weight:600; text-decoration:none; color:var(--primary-text-color); white-space:nowrap; }
 .pill ha-icon { --mdc-icon-size:17px; }
@@ -2168,11 +2351,12 @@ class HolmMyMenuCardEditor extends HTMLElement {
     this._lang = setLang(this._hass, this._c);
     if (!this._f) {
       this._f = document.createElement("ha-form");
-      this._f.computeLabel = (s) => ({ language: _("Langue"), title: _("Titre"), view: _("Affichage"), tab: _("Onglet à l'ouverture"), show_frame: _("Afficher le cadre"), today_slots: _("Repas affichés (toutes les vues)"), list_height: _("Hauteur des listes en px (0 = sans limite)") }[s.name] || s.name);
+      this._f.computeLabel = (s) => ({ language: _("Langue"), title: _("Titre"), view: _("Affichage"), tab: _("Onglet à l'ouverture"), week_start: _("Début du planning"), show_frame: _("Afficher le cadre"), today_slots: _("Repas affichés (toutes les vues)"), list_height: _("Hauteur des listes en px (0 = sans limite)") }[s.name] || s.name);
       this._f.schema = [langField(), { name: "title", selector: { text: {} } },
         { type: "grid", name: "", schema: [
           { name: "view", selector: { select: { mode: "dropdown", options: [{ value: "full", label: _("Complet (semaine, recettes, ingrédients, courses)") }, { value: "today", label: _("Menu du jour (compact, consultation)") }, { value: "week", label: _("Semaine (planning, consultation)") }, { value: "stats", label: _("Statistiques") }] } } },
           { name: "tab", selector: { select: { mode: "dropdown", options: [{ value: "week", label: _("Semaine") }, { value: "recipes", label: _("Recettes") }, { value: "ingredients", label: _("Ingrédients") }, { value: "shopping", label: _("Courses") }, { value: "reminders", label: _("Rappels") }, { value: "stats", label: _("Statistiques") }] } } }] },
+        { name: "week_start", selector: { select: { mode: "dropdown", options: [{ value: "monday", label: _("Lundi (semaine en cours)") }, { value: "today", label: _("Aujourd'hui (7 prochains jours)") }] } } },
         { name: "today_slots", selector: { select: { multiple: true, mode: "list", options: [{ value: "midi", label: _("Midi") }, { value: "soir", label: _("Soir") }] } } },
         { name: "list_height", selector: { number: { min: 0, max: 2000, step: 20, mode: "box", unit_of_measurement: "px" } } },
         { name: "show_frame", selector: { boolean: {} } }];
@@ -2180,6 +2364,7 @@ class HolmMyMenuCardEditor extends HTMLElement {
         const v = { ...this._c, ...e.detail.value };
         ["view", "tab"].forEach((k) => { if (v[k] === { view: "full", tab: "week" }[k]) delete v[k]; });
         if (v.show_frame !== false) delete v.show_frame;
+        if (v.week_start !== "today") delete v.week_start;
         if (Array.isArray(v.today_slots) && (!v.today_slots.length || v.today_slots.length === 2)) delete v.today_slots;
         if (v.list_height === 620 || v.list_height === undefined || v.list_height === null) delete v.list_height;
         this._c = v;
@@ -2188,7 +2373,7 @@ class HolmMyMenuCardEditor extends HTMLElement {
       this.appendChild(this._f);
     }
     this._f.hass = this._hass;
-    this._f.data = { view: "full", tab: "week", show_frame: true, today_slots: ["midi", "soir"], list_height: 620, ...this._c };
+    this._f.data = { view: "full", tab: "week", week_start: "monday", show_frame: true, today_slots: ["midi", "soir"], list_height: 620, ...this._c };
   }
 }
 

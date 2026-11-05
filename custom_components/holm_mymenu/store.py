@@ -32,7 +32,7 @@ class MenuStore:
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self.servings = servings
         self.data: dict = {"ingredients": {}, "recipes": {}, "plan": {}, "shopping": {"items": [], "range": None},
-                           "contacts": [], "history": {}, "custom_aisles": [], "reminders": []}
+                           "contacts": [], "history": {}, "custom_aisles": [], "reminders": [], "settings": {"avoid": []}}
         self._img_dir = hass.config.path("www", "holm_mymenu")
 
     async def async_load(self) -> None:
@@ -444,6 +444,30 @@ class MenuStore:
         rec["image_remote"] = url
         rec["image"] = f"{MEDIA_PATH}/{name}?v={int(time.time())}"
 
+    # ---------------- réglages partagés (ingrédients à éviter dans les suggestions) ----------------
+    def set_avoid(self, items: list[str]) -> list[str]:
+        clean, seen = [], set()
+        for it in items:
+            t = " ".join(str(it or "").split())[:60]
+            if t and t.lower() not in seen:
+                seen.add(t.lower())
+                clean.append(t)
+        self.data.setdefault("settings", {})["avoid"] = clean[:100]
+        return clean
+
+    def fill_slots(self, items: list[dict]) -> int:
+        """Planifie des recettes sur des repas vides uniquement (« Suggérer la semaine »)."""
+        n = 0
+        for it in items:
+            day, slot, rid = it.get("day"), it.get("slot"), it.get("recipe_id")
+            if slot not in SLOTS or rid not in self.data["recipes"] or not isinstance(day, str):
+                continue
+            if self.data["plan"].get(day, {}).get(slot):
+                continue
+            self.set_slot(day, slot, [{"type": "recipe", "recipe_id": rid, "servings": it.get("servings")}])
+            n += 1
+        return n
+
     # ---------------- planning ----------------
     def set_slot(self, day: str, slot: str, entries: list[dict], track: bool = True) -> None:
         if slot not in SLOTS:
@@ -695,7 +719,7 @@ class MenuStore:
         return {"ingredients": self.data["ingredients"], "recipes": self.data["recipes"], "plan": self.data["plan"],
                 "shopping": {**self.data["shopping"], "groups": shopping_groups(self.data["shopping"].get("items", []))}, "contacts": self.data["contacts"],
                 "history": {k: v.get("count", 0) for k, v in self.data["history"].items()},
-                "reminders": self.data.get("reminders", []), "aisles": self.aisles(), "custom_aisles": self.data.get("custom_aisles", []), "slots": list(SLOTS), "servings": self.servings}
+                "reminders": self.data.get("reminders", []), "settings": {"avoid": list(self.data.get("settings", {}).get("avoid", []))}, "aisles": self.aisles(), "custom_aisles": self.data.get("custom_aisles", []), "slots": list(SLOTS), "servings": self.servings}
 
 
 async def gather_limited(coros, limit: int = 4):

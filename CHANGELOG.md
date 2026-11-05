@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0
+- **Aujourd'hui + 6 jours** ([#13](https://github.com/kaaribou/holm-mymenu/issues/13)) : bouton dans l'onglet Semaine (et la vue Semaine en consultation) pour passer de la semaine du lundi au dimanche à une période qui commence aujourd'hui ; choix retenu par l'appareil, nouvelle option `week_start: monday | today` (éditeur visuel compris). L'export calendrier suit la période affichée.
+- **Suggérer des repas** ([#15](https://github.com/kaaribou/holm-mymenu/issues/15)) : remplit les repas vides de la période (à partir d'aujourd'hui) avec ses propres recettes, sans doublon, en évitant celles des 14 derniers jours et en favorisant favorites, recettes souvent planifiées et bien notées ; proposition modifiable (🎲 autre recette, ✕ ne pas remplir) avant de planifier. Les repas déjà prévus ne sont jamais remplacés (nouvelle commande `holm_mymenu/plan/fill`).
+- **Filtres de recettes** : catégorie, temps maximum (total, ou préparation + cuisson) et note minimum, dans l'onglet Recettes et dans les suggestions ; les suggestions écartent par défaut entrées, desserts, accompagnements…
+- **Ingrédients à éviter** dans les suggestions, enregistrés dans l'intégration (partagés entre appareils, commande `holm_mymenu/settings/avoid`). Simple filtre sur le nom des ingrédients, sans promesse « compatible allergies ».
+
 ## 1.2.0
 - **8 langues** : traductions allemand, espagnol, italien, néerlandais, portugais et polonais ajoutées (configuration, options, entités, actions), en plus du français et de l'anglais. Carte HOLM My Menu traduite elle aussi (éditeur compris), avec une nouvelle option `language` ; elle suit sinon la langue du profil Home Assistant (anglais si la langue n'est pas traduite).
 - README en anglais (`README.en.md`).
