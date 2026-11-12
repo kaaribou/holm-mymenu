@@ -25,14 +25,5 @@
         }
       }
     }
-  },
-  "telegram_shopping": {
-    "title": "Lista de la compra",
-    "generated": "Generada el",
-    "unknown_quantity": "cantidad sin especificar",
-    "eggs": "Huevos",
-    "potatoes": "Patatas",
-    "tomatoes": "Tomates",
-    "part": "parte"
   }
 }

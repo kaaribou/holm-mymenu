@@ -25,14 +25,5 @@
         }
       }
     }
-  },
-  "telegram_shopping": {
-    "title": "Einkaufsliste",
-    "generated": "Erstellt am",
-    "unknown_quantity": "Menge nicht angegeben",
-    "eggs": "Eier",
-    "potatoes": "Kartoffeln",
-    "tomatoes": "Tomaten",
-    "part": "Teil"
   }
 }

@@ -25,14 +25,5 @@
         }
       }
     }
-  },
-  "telegram_shopping": {
-    "title": "Lista della spesa",
-    "generated": "Generata il",
-    "unknown_quantity": "quantità non specificata",
-    "eggs": "Uova",
-    "potatoes": "Patate",
-    "tomatoes": "Pomodori",
-    "part": "parte"
   }
 }

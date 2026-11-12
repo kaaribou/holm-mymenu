@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1
+- Préparation de l'entrée dans le catalogue de la Marketplace : validation automatique (Hassfest et HACS) ; textes Telegram inutilisés retirés des fichiers de traduction, qui n'acceptent que les clés de Home Assistant.
+- Aucun changement de fonctionnement.
+
 ## 1.3.0
 - **Aujourd'hui + 6 jours** ([#13](https://github.com/kaaribou/holm-mymenu/issues/13)) : bouton dans l'onglet Semaine (et la vue Semaine en consultation) pour passer de la semaine du lundi au dimanche à une période qui commence aujourd'hui ; choix retenu par l'appareil, nouvelle option `week_start: monday | today` (éditeur visuel compris). L'export calendrier suit la période affichée.
 - **Suggérer des repas** ([#15](https://github.com/kaaribou/holm-mymenu/issues/15)) : remplit les repas vides de la période (à partir d'aujourd'hui) avec ses propres recettes, sans doublon, en évitant celles des 14 derniers jours et en favorisant favorites, recettes souvent planifiées et bien notées ; proposition modifiable (🎲 autre recette, ✕ ne pas remplir) avant de planifier. Les repas déjà prévus ne sont jamais remplacés (nouvelle commande `holm_mymenu/plan/fill`).

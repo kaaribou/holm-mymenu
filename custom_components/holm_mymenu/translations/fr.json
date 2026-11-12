@@ -25,14 +25,5 @@
         }
       }
     }
-  },
-  "telegram_shopping": {
-    "title": "Liste de courses",
-    "generated": "Générée le",
-    "unknown_quantity": "quantité non précisée",
-    "eggs": "Œufs",
-    "potatoes": "Pommes de terre",
-    "tomatoes": "Tomates",
-    "part": "suite"
   }
 }

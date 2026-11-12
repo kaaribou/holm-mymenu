@@ -25,14 +25,5 @@
         }
       }
     }
-  },
-  "telegram_shopping": {
-    "title": "Lista zakupów",
-    "generated": "Wygenerowano",
-    "unknown_quantity": "ilość nieokreślona",
-    "eggs": "Jajka",
-    "potatoes": "Ziemniaki",
-    "tomatoes": "Pomidory",
-    "part": "część"
   }
 }

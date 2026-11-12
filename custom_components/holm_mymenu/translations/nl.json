@@ -25,14 +25,5 @@
         }
       }
     }
-  },
-  "telegram_shopping": {
-    "title": "Boodschappenlijst",
-    "generated": "Gemaakt op",
-    "unknown_quantity": "hoeveelheid niet opgegeven",
-    "eggs": "Eieren",
-    "potatoes": "Aardappelen",
-    "tomatoes": "Tomaten",
-    "part": "deel"
   }
 }
