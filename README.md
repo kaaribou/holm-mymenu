@@ -58,7 +58,18 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
 - 🧩 **Capteurs** pour vos automatisations : menu du midi, menu du soir et prochain repas.
 
 
-### 🆕 Nouveautés de la 1.3.0
+### 🆕 Nouveautés de la 1.4.0
+
+- 🍲 **Repas à préparer** ([#16](https://github.com/kaaribou/holm-mymenu/issues/16)) : une liste de plats prévus pour les prochains jours, **sans jour ni créneau**. Leurs ingrédients vont dans la liste de courses ; vous choisissez au dernier moment, puis ✓ quand c'est cuisiné. Voir [Repas à préparer](#repas-à-préparer).
+- 📁 **Catégories de recettes** ([#18](https://github.com/kaaribou/holm-mymenu/issues/18)) : des pastilles en haut de l'onglet Recettes, comme des dossiers (Soupes, Poisson, Desserts…), avec un écran pour les créer, les renommer ou les supprimer. Voir [Catégories](#catégories-de-recettes).
+- 📚 **Parcourir mes recettes** en ajoutant un repas : sous la recherche, les recettes rangées par catégorie, avec leur durée.
+- 🧾 **Historique des repas préparés**, lisible par vos automatisations et vos agents (commandes WebSocket documentées plus bas).
+
+| Repas à préparer | Parcourir mes recettes |
+|---|---|
+| ![Repas à préparer](docs/images/repas-a-preparer.png) | ![Parcourir mes recettes](docs/images/parcourir.png) |
+
+### Nouveautés de la 1.3.0
 
 - 📅 **Aujourd'hui et les 6 jours suivants** ([#13](https://github.com/kaaribou/holm-mymenu/issues/13)) : un bouton à côté de « Aujourd'hui » fait passer le planning de la semaine du lundi au dimanche à une vue qui commence aujourd'hui. Le choix est retenu par l'appareil ; l'option `week_start: today` en fait le réglage par défaut.
 - ✨ **Suggérer des repas** ([#15](https://github.com/kaaribou/holm-mymenu/issues/15)) : le bouton **Suggérer** de l'onglet Semaine remplit les repas vides avec **vos propres recettes**, sans doublon, en évitant celles des 14 derniers jours et en favorisant vos favorites. Chaque proposition se change d'un toucher (🎲) ou se retire avant de planifier. Les repas déjà prévus ne sont jamais remplacés.
@@ -86,6 +97,7 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
 - [Rappels et notifications](#rappels-et-notifications)
 - [Statistiques](#statistiques)
 - [Capteurs](#capteurs)
+- [Commandes WebSocket](#commandes-websocket-automatisations-agents-ia)
 - [FAQ / dépannage](#faq--dépannage)
 - [Crédits & licence](#crédits--licence)
 
@@ -168,9 +180,31 @@ Touchez un repas pour le remplir. Le champ de recherche propose en même temps :
 3. des produits Open Food Facts ;
 4. l'ajout d'un ingrédient ou d'une note libre.
 
+**Parcourir mes recettes** (sous le champ, quand il est vide) déplie vos recettes rangées par catégorie : touchez une pastille (**Toutes**, **Favoris**, une catégorie ou **Sans catégorie**), puis la recette. Chaque ligne indique sa durée et sa catégorie. La fenêtre se souvient de la dernière catégorie choisie ; touchez la barre pour replier la liste et revoir vos favoris.
+
 Dans la fenêtre d'un repas, les recettes, les ingrédients et les notes sont séparés. Un toucher ouvre le détail, et la flèche ← ramène au repas.
 
 **Suggérer** propose une recette pour chaque repas vide de la période affichée (à partir d'aujourd'hui), choisie parmi vos recettes selon les filtres (catégorie, temps, note, favoris) et les ingrédients à éviter. Changez une proposition avec 🎲, retirez-la avec ✕, puis **Planifier** : seuls les repas vides sont remplis.
+
+### Repas à préparer
+
+Sous le planning de l'onglet **Semaine**, le cadre **Repas à préparer** rassemble les plats prévus pour les prochains jours **sans leur donner de jour** : vous faites les courses pour cinq plats, et chaque soir vous choisissez selon l'envie et le temps.
+
+| Élément | Rôle |
+|---|---|
+| **Repas à préparer** (titre) | Le nombre de plats en attente ; un toucher replie ou déplie le cadre (choix retenu par l'appareil) |
+| **Ajouter** | Cherche une recette (ou la parcourt par catégorie) et l'ajoute à la liste |
+| Photo et nom | Ouvrent la recette, au nombre de personnes choisi |
+| **− N pers. +** | Nombre de personnes pour ce plat : les quantités de la liste de courses suivent |
+| 📅 **Placer dans le planning** | Choisir un jour et un repas : le plat quitte la liste et rejoint le planning |
+| ✓ **Préparé** | Le plat est cuisiné : il quitte la liste et entre dans l'historique (statistiques, et **Suggérer** évite de le reproposer pendant 14 jours, comme un repas du planning) |
+| ✕ **Retirer** | Le plat ne sera finalement pas fait |
+
+Sur ordinateur, vous pouvez aussi **glisser un plat sur un repas** du planning. **Suggérer** ne propose pas les plats déjà dans cette liste. Depuis la fiche d'une recette, le bouton **À préparer** l'ajoute directement, au nombre de personnes affiché.
+
+Dans l'onglet **Courses**, la case **Inclure les repas à préparer (N)** (cochée par défaut, choix retenu par l'appareil) ajoute leurs ingrédients à la liste générée, quelle que soit la période choisie. La ligne d'état de la liste l'indique (« + 3 repas à préparer »).
+
+![Courses avec les repas à préparer](docs/images/courses-repas-a-preparer.png)
 
 ### Vues « Menu du jour » et « Semaine »
 
@@ -191,6 +225,23 @@ show_frame: false
 ---
 
 ## Recettes
+
+### Catégories de recettes
+
+En haut de l'onglet **Recettes**, une pastille par catégorie, avec le nombre de recettes : un toucher n'affiche que celle-ci, comme un dossier ; un second toucher revient à **Toutes**. **Sans catégorie** regroupe les recettes à ranger.
+
+- **Ranger une recette** : dans sa fiche, **Modifier** → **Catégorie**. Le champ propose vos catégories (pastilles sous le champ, ou liste en tapant) ; un nouveau nom crée une nouvelle catégorie.
+- **Gérer** ouvre la liste des catégories :
+  - renommer une catégorie la renomme sur toutes ses recettes (en reprenant le nom d'une catégorie existante, les deux sont fusionnées) ;
+  - 🗑 retire la catégorie : ses recettes sont conservées, sans catégorie ;
+  - **Créer** ajoute une catégorie vide, prête à recevoir des recettes.
+- Les majuscules ne comptent pas : « soupes » et « Soupes » sont la même catégorie.
+- Les recettes importées gardent la catégorie donnée par le site (Marmiton, Jow, Mealie…) quand il y en a une.
+- Sous chaque recette de la liste, sa catégorie est rappelée quand aucune pastille n'est choisie.
+
+![Catégories de recettes](docs/images/categories.png)
+
+### Ajouter une recette
 
 Bouton **Ajouter** de l'onglet Recettes :
 
@@ -370,6 +421,25 @@ automation:
           media_player_entity_id: media_player.cuisine
           message: "Ce soir au menu : {{ states('sensor.holm_mymenu_soir') }}"
 ```
+
+---
+
+## Commandes WebSocket (automatisations, agents IA)
+
+Toutes les fonctions de la carte passent par des commandes WebSocket `holm_mymenu/…`, utilisables par vos scripts ou un agent IA. Nouveautés de la 1.4.0 :
+
+| Commande | Paramètres | Rôle |
+|---|---|---|
+| `holm_mymenu/queue/add` | `recipe_id`, `servings` (facultatif) | Ajoute un repas à préparer |
+| `holm_mymenu/queue/update` | `item_id`, `servings` | Change le nombre de personnes |
+| `holm_mymenu/queue/plan` | `item_id`, `day` (AAAA-MM-JJ), `slot` (`midi`/`soir`) | Place le repas dans le planning |
+| `holm_mymenu/queue/done` | `item_id`, `day` (facultatif) | Repas préparé : historique |
+| `holm_mymenu/queue/remove` | `item_id` | Retire le repas |
+| `holm_mymenu/category/add` | `name` | Crée une catégorie vide |
+| `holm_mymenu/category/rename` | `old`, `new` (vide = retirer) | Renomme, fusionne ou retire une catégorie |
+| `holm_mymenu/shopping/generate` | `start`, `end`, `include_queue` (vrai par défaut) | Génère la liste de courses |
+
+L'état envoyé par `holm_mymenu/subscribe` contient aussi `queue` (repas à préparer), `cooked` (derniers repas préparés : recette, date, personnes) et `recipe_categories`. Chaque recette porte `category`, `prep`, `cook` et `total` (minutes).
 
 ---
 

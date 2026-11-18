@@ -59,7 +59,20 @@ HOLM My Menu is a **Home Assistant** integration designed as a simpler Mealie. Y
 - 📄 **Recipe import from a text PDF**: read locally with `pypdf`, no OCR service or external server. Scanned PDFs without selectable text aren't supported.
 - 🧩 **Sensors** for your automations: lunch menu, dinner menu and next meal.
 
-### 🆕 What's new in 1.3.0
+### 🆕 What's new in 1.4.0
+
+- 🍲 **Meals to cook** ([#16](https://github.com/kaaribou/holm-mymenu/issues/16)): a list of dishes planned for the next few days, **with no day or slot**. Their ingredients go into the shopping list; you choose at the last minute, then ✓ once cooked. See [Meals to cook](#meals-to-cook).
+- 📁 **Recipe categories** ([#18](https://github.com/kaaribou/holm-mymenu/issues/18)): chips at the top of the Recipes tab, like folders (Soups, Fish, Desserts…), with a screen to create, rename or delete them. See [Recipe categories](#recipe-categories).
+- 📚 **Browse my recipes** when adding a meal: under the search, your recipes sorted by category, with their time.
+- 🧾 **History of cooked meals**, readable by your automations and agents (WebSocket commands documented below).
+
+| Meals to cook | Browse my recipes |
+|---|---|
+| ![Meals to cook](docs/images/repas-a-preparer.png) | ![Browse my recipes](docs/images/parcourir.png) |
+
+*(screenshots in French)*
+
+### What's new in 1.3.0
 
 - 📅 **Today and the next 6 days** ([#13](https://github.com/kaaribou/holm-mymenu/issues/13)): a button next to "Today" switches the planner from the Monday-to-Sunday week to a view starting today. The choice is remembered by the device; the `week_start: today` option makes it the default.
 - ✨ **Suggest meals** ([#15](https://github.com/kaaribou/holm-mymenu/issues/15)): the **Suggest** button of the Week tab fills empty meals with **your own recipes**, without duplicates, avoiding those of the last 14 days and favouring your favourites. Each proposal can be changed with a tap (🎲) or removed before planning. Meals already planned are never replaced.
@@ -82,6 +95,7 @@ HOLM My Menu is a **Home Assistant** integration designed as a simpler Mealie. Y
 - [Reminders and notifications](#reminders-and-notifications)
 - [Statistics](#statistics)
 - [Sensors](#sensors)
+- [WebSocket commands](#websocket-commands-automations-ai-agents)
 - [FAQ / troubleshooting](#faq--troubleshooting)
 
 ---
@@ -164,9 +178,31 @@ Tap a meal to fill it. The search field offers at the same time:
 3. Open Food Facts products;
 4. adding an ingredient or a free note.
 
+**Browse my recipes** (under the field, when it is empty) unfolds your recipes sorted by category: tap a chip (**All**, **Favourites**, a category or **No category**), then the recipe. Each line shows its time and category. The window remembers the last category chosen; tap the bar to fold the list and see your favourites again.
+
 In a meal's window, recipes, ingredients and notes are kept apart. A tap opens the details, and the ← arrow takes you back to the meal.
 
 **Suggest** proposes a recipe for each empty meal of the period shown (from today on), picked among your recipes according to the filters (category, time, rating, favourites) and the ingredients to avoid. Change a proposal with 🎲, remove it with ✕, then **Plan**: only empty meals are filled.
+
+### Meals to cook
+
+Under the plan in the **Week** tab, the **Meals to cook** box gathers the dishes planned for the next few days **without giving them a day**: you shop for five dishes, and each evening you pick one depending on your mood and time.
+
+| Element | Role |
+|---|---|
+| **Meals to cook** (title) | Number of dishes waiting; a tap folds or unfolds the box (remembered by the device) |
+| **Add** | Search for a recipe (or browse by category) and add it to the list |
+| Photo and name | Open the recipe, for the number of people chosen |
+| **− N pers. +** | Number of people for this dish: the shopping list quantities follow |
+| 📅 **Put in the plan** | Choose a day and a meal: the dish leaves the list and joins the plan |
+| ✓ **Cooked** | The dish is cooked: it leaves the list and enters the history (statistics, and **Suggest** avoids proposing it again for 14 days, like a planned meal) |
+| ✕ **Remove** | The dish won't be made after all |
+
+On a computer you can also **drag a dish onto a meal** of the plan. **Suggest** does not propose dishes already in this list. From a recipe, the **To cook** button adds it directly, for the number of people shown.
+
+In the **Shopping** tab, the **Include meals to cook (N)** box (ticked by default, remembered by the device) adds their ingredients to the generated list, whatever the period chosen. The list's status line shows it ("+ 3 meals to cook").
+
+![Shopping with meals to cook](docs/images/courses-repas-a-preparer.png)
 
 ### "Today's menu" and "Week" views
 
@@ -187,6 +223,23 @@ show_frame: false
 ---
 
 ## Recipes
+
+### Recipe categories
+
+At the top of the **Recipes** tab, one chip per category, with its number of recipes: a tap shows only that one, like a folder; a second tap goes back to **All**. **No category** gathers the recipes still to sort.
+
+- **Sort a recipe**: in its sheet, **Edit** → **Category**. The field suggests your categories (chips under the field, or a list as you type); a new name creates a new category.
+- **Manage** opens the list of categories:
+  - renaming a category renames it on all its recipes (using the name of an existing category merges both);
+  - 🗑 removes the category: its recipes are kept, without a category;
+  - **Create** adds an empty category, ready for recipes.
+- Case does not matter: "soups" and "Soups" are the same category.
+- Imported recipes keep the category given by the site (Marmiton, Jow, Mealie…) when there is one.
+- Under each recipe of the list, its category is shown when no chip is selected.
+
+![Recipe categories](docs/images/categories.png)
+
+### Add a recipe
 
 **Add** button in the Recipes tab:
 
@@ -366,6 +419,25 @@ automation:
           media_player_entity_id: media_player.kitchen
           message: "Tonight's menu: {{ states('sensor.holm_mymenu_soir') }}"
 ```
+
+---
+
+## WebSocket commands (automations, AI agents)
+
+Every feature of the card goes through `holm_mymenu/…` WebSocket commands, usable by your scripts or an AI agent. New in 1.4.0:
+
+| Command | Parameters | Role |
+|---|---|---|
+| `holm_mymenu/queue/add` | `recipe_id`, `servings` (optional) | Add a meal to cook |
+| `holm_mymenu/queue/update` | `item_id`, `servings` | Change the number of people |
+| `holm_mymenu/queue/plan` | `item_id`, `day` (YYYY-MM-DD), `slot` (`midi`/`soir`) | Put the meal in the plan |
+| `holm_mymenu/queue/done` | `item_id`, `day` (optional) | Meal cooked: history |
+| `holm_mymenu/queue/remove` | `item_id` | Remove the meal |
+| `holm_mymenu/category/add` | `name` | Create an empty category |
+| `holm_mymenu/category/rename` | `old`, `new` (empty = remove) | Rename, merge or remove a category |
+| `holm_mymenu/shopping/generate` | `start`, `end`, `include_queue` (true by default) | Generate the shopping list |
+
+The state sent by `holm_mymenu/subscribe` also contains `queue` (meals to cook), `cooked` (last cooked meals: recipe, date, people) and `recipe_categories`. Each recipe has `category`, `prep`, `cook` and `total` (minutes).
 
 ---
 

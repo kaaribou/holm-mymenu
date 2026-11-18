@@ -32,7 +32,8 @@ class MenuStore:
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self.servings = servings
         self.data: dict = {"ingredients": {}, "recipes": {}, "plan": {}, "shopping": {"items": [], "range": None},
-                           "contacts": [], "history": {}, "custom_aisles": [], "reminders": [], "settings": {"avoid": []}}
+                           "contacts": [], "history": {}, "custom_aisles": [], "reminders": [], "settings": {"avoid": []},
+                           "queue": [], "cooked": [], "recipe_categories": []}
         self._img_dir = hass.config.path("www", "holm_mymenu")
 
     async def async_load(self) -> None:
@@ -468,6 +469,92 @@ class MenuStore:
             n += 1
         return n
 
+    # ---------------- catégories de recettes (#18) ----------------
+    @staticmethod
+    def _clean_cat(name) -> str:
+        return " ".join(str(name or "").split())[:40]
+
+    def categories(self) -> list[str]:
+        """Catégories connues : celles des recettes + celles créées vides (dossiers sans recette pour l'instant)."""
+        seen: dict[str, str] = {}
+        for c in [*(r.get("category") for r in self.data["recipes"].values()), *self.data.get("recipe_categories", [])]:
+            c = self._clean_cat(c)
+            if c and c.casefold() not in seen:
+                seen[c.casefold()] = c
+        return sorted(seen.values(), key=str.casefold)
+
+    def category_add(self, name: str) -> str:
+        name = self._clean_cat(name)
+        if not name:
+            raise ValueError("Nom de catégorie vide")
+        if any(c.casefold() == name.casefold() for c in self.categories()):
+            raise ValueError("Cette catégorie existe déjà")
+        self.data.setdefault("recipe_categories", []).append(name)
+        return name
+
+    def category_rename(self, old: str, new: str) -> int:
+        """Renomme une catégorie sur toutes ses recettes ; nom vide = la catégorie est retirée (les recettes restent)."""
+        old_k, new = self._clean_cat(old).casefold(), self._clean_cat(new)
+        if not old_k:
+            raise ValueError("Catégorie inconnue")
+        if new and new.casefold() != old_k and any(c.casefold() == new.casefold() for c in self.categories()):
+            # fusion avec une catégorie existante : on reprend son orthographe
+            new = next(c for c in self.categories() if c.casefold() == new.casefold())
+        n = 0
+        for r in self.data["recipes"].values():
+            if self._clean_cat(r.get("category")).casefold() == old_k:
+                r["category"] = new
+                n += 1
+        cats = [c for c in self.data.get("recipe_categories", []) if self._clean_cat(c).casefold() != old_k]
+        if new and not any(c.casefold() == new.casefold() for c in cats):
+            cats.append(new)
+        self.data["recipe_categories"] = cats
+        return n
+
+    # ---------------- repas à préparer (#16) : choisis sans jour ni créneau ----------------
+    def queue_add(self, rid: str, servings: int | None = None) -> dict:
+        r = self.data["recipes"].get(rid)
+        if not r:
+            raise ValueError("Recette introuvable")
+        it = {"id": _id(), "recipe_id": rid, "servings": max(1, int(servings or r.get("servings") or self.servings)), "added": date.today().isoformat()}
+        self.data.setdefault("queue", []).append(it)
+        return it
+
+    def _queue_item(self, qid: str) -> dict:
+        it = next((x for x in self.data.get("queue", []) if x["id"] == qid), None)
+        if not it:
+            raise ValueError("Repas à préparer introuvable")
+        return it
+
+    def queue_update(self, qid: str, servings: int) -> dict:
+        it = self._queue_item(qid)
+        it["servings"] = max(1, min(50, int(servings)))
+        return it
+
+    def queue_remove(self, qid: str) -> None:
+        self._queue_item(qid)
+        self.data["queue"] = [x for x in self.data["queue"] if x["id"] != qid]
+
+    def queue_done(self, qid: str, day: str | None = None) -> dict:
+        """Repas préparé : il quitte la liste et entre dans l'historique des repas cuisinés."""
+        it = self._queue_item(qid)
+        day = day or date.today().isoformat()
+        self.queue_remove(qid)
+        self._count(it["recipe_id"], day)
+        entry = {"recipe_id": it["recipe_id"], "date": day, "servings": it["servings"]}
+        cooked = self.data.setdefault("cooked", [])
+        cooked.append(entry)
+        del cooked[:-300]
+        return entry
+
+    def queue_plan(self, qid: str, day: str, slot: str) -> None:
+        """Le repas trouve sa place dans le planning : il quitte la liste « À préparer »."""
+        it = self._queue_item(qid)
+        cur = list(self.data["plan"].get(day, {}).get(slot, []))
+        if not any(e.get("type") == "recipe" and e.get("recipe_id") == it["recipe_id"] for e in cur):
+            self.set_slot(day, slot, cur + [{"type": "recipe", "recipe_id": it["recipe_id"], "servings": it["servings"]}])
+        self.queue_remove(qid)
+
     # ---------------- planning ----------------
     def set_slot(self, day: str, slot: str, entries: list[dict], track: bool = True) -> None:
         if slot not in SLOTS:
@@ -560,7 +647,7 @@ class MenuStore:
     # rappels peuvent ensuite afficher la semaine exacte même plusieurs jours
     # après sa génération. Les exclusions restent liées à cette plage.
     # GÉNÉRATION : préserver les articles manuels et les exclusions de la période en cours.
-    def generate_shopping(self, start: str, end: str, keep_manual: bool = True) -> None:
+    def generate_shopping(self, start: str, end: str, keep_manual: bool = True, include_queue: bool = True) -> None:
         acc: dict[tuple, dict] = {}
 
         def add(iid, name, qty, unit, source):
@@ -594,6 +681,16 @@ class MenuStore:
                         if ing:
                             add(ing["id"], ing["name"], e.get("qty"), e.get("unit", ""), None)
             d += timedelta(days=1)
+        n_queue = 0
+        if include_queue:   # repas à préparer (#16) : comptés une fois, quel que soit le jour où ils seront cuisinés
+            for q in self.data.get("queue", []):
+                r = self.data["recipes"].get(q["recipe_id"])
+                if not r:
+                    continue
+                n_queue += 1
+                f = (q.get("servings") or r.get("servings") or 1) / (r.get("servings") or 1)
+                for line in r.get("ingredients", []):
+                    add(line.get("ingredient_id"), line.get("name"), line["qty"] * f if line.get("qty") is not None else None, line.get("unit", ""), r["name"])
         old = self.data["shopping"].get("items", [])
         previous_range = self.data["shopping"].get("range") or {}
         same_range = previous_range.get("start") == start and previous_range.get("end") == end
@@ -607,7 +704,7 @@ class MenuStore:
             it["display"] = pretty_qty(it["qty"], it["unit"])
         if keep_manual:
             items += [i for i in old if i.get("manual")]
-        self.data["shopping"] = {"items": items, "range": {"start": start, "end": end}, "generated": time.time(), "excluded": sorted(excluded), "excluded_details": excluded_details}
+        self.data["shopping"] = {"items": items, "range": {"start": start, "end": end}, "generated": time.time(), "excluded": sorted(excluded), "excluded_details": excluded_details, "queue": n_queue}
 
     def shopping_add(self, name: str, qty: str = "") -> dict:
         ing = self.find_ingredient(name)
@@ -719,7 +816,8 @@ class MenuStore:
         return {"ingredients": self.data["ingredients"], "recipes": self.data["recipes"], "plan": self.data["plan"],
                 "shopping": {**self.data["shopping"], "groups": shopping_groups(self.data["shopping"].get("items", []))}, "contacts": self.data["contacts"],
                 "history": {k: v.get("count", 0) for k, v in self.data["history"].items()},
-                "reminders": self.data.get("reminders", []), "settings": {"avoid": list(self.data.get("settings", {}).get("avoid", []))}, "aisles": self.aisles(), "custom_aisles": self.data.get("custom_aisles", []), "slots": list(SLOTS), "servings": self.servings}
+                "reminders": self.data.get("reminders", []), "queue": self.data.get("queue", []), "cooked": self.data.get("cooked", [])[-60:],
+                "recipe_categories": self.categories(), "settings": {"avoid": list(self.data.get("settings", {}).get("avoid", []))}, "aisles": self.aisles(), "custom_aisles": self.data.get("custom_aisles", []), "slots": list(SLOTS), "servings": self.servings}
 
 
 async def gather_limited(coros, limit: int = 4):

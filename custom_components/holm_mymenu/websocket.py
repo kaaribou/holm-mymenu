@@ -46,7 +46,8 @@ def async_register(hass: HomeAssistant) -> None:
                ws_shop_toggle, ws_shop_toggle_group, ws_shop_remove_group, ws_shop_remove, ws_shop_update, ws_aisle_create, ws_aisle_update, ws_aisle_delete, ws_shop_restore, ws_mealie_list, ws_mealie_import, ws_mealie_export, ws_contact_save, ws_contact_delete,
                ws_shop_send, ws_stats, ws_image_upload, ws_barcode, ws_mail_info, ws_calendar_export, ws_document_upload_start,
                ws_document_upload_chunk, ws_document_upload_finish, ws_document_upload_cancel,
-               ws_reminder_save, ws_reminder_delete, ws_reminder_test, ws_plan_fill, ws_settings_avoid):
+               ws_reminder_save, ws_reminder_delete, ws_reminder_test, ws_plan_fill, ws_settings_avoid,
+               ws_queue_add, ws_queue_update, ws_queue_remove, ws_queue_done, ws_queue_plan, ws_category_add, ws_category_rename):
         websocket_api.async_register_command(hass, fn)
 
 
@@ -294,7 +295,8 @@ async def ws_plan_move(hass, connection, msg):
 
 
 # ---------------- courses ----------------
-@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/shopping/generate", vol.Required("start"): str, vol.Required("end"): str})
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/shopping/generate", vol.Required("start"): str, vol.Required("end"): str,
+                                  vol.Optional("include_queue", default=True): bool})
 @websocket_api.async_response
 # API COURSES : générer à partir des recettes sans perdre les ajouts manuels.
 async def ws_shop_generate(hass, connection, msg):
@@ -304,9 +306,66 @@ async def ws_shop_generate(hass, connection, msg):
     except ValueError as err:
         connection.send_error(msg["id"], "invalid_range", str(err))
         return
-    store.generate_shopping(msg["start"], msg["end"])
+    store.generate_shopping(msg["start"], msg["end"], include_queue=msg["include_queue"])
     store.changed("shopping")
-    connection.send_result(msg["id"])
+    connection.send_result(msg["id"], {"queue": store.data["shopping"].get("queue", 0)})
+
+
+# ---------------- repas à préparer (#16) ----------------
+def _queue_cmd(fn):
+    async def run(hass, connection, msg):
+        store = _store(hass)
+        try:
+            out = fn(store, msg)
+        except (ValueError, TypeError) as err:
+            _err(connection, msg, err)
+            return
+        store.changed("plan")
+        connection.send_result(msg["id"], out or {})
+    return run
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/queue/add", vol.Required("recipe_id"): str, vol.Optional("servings"): vol.Any(int, None)})
+@websocket_api.async_response
+async def ws_queue_add(hass, connection, msg):
+    await _queue_cmd(lambda st, m: st.queue_add(m["recipe_id"], m.get("servings")))(hass, connection, msg)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/queue/update", vol.Required("item_id"): str, vol.Required("servings"): int})
+@websocket_api.async_response
+async def ws_queue_update(hass, connection, msg):
+    await _queue_cmd(lambda st, m: st.queue_update(m["item_id"], m["servings"]))(hass, connection, msg)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/queue/remove", vol.Required("item_id"): str})
+@websocket_api.async_response
+async def ws_queue_remove(hass, connection, msg):
+    await _queue_cmd(lambda st, m: st.queue_remove(m["item_id"]))(hass, connection, msg)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/queue/done", vol.Required("item_id"): str, vol.Optional("day"): str})
+@websocket_api.async_response
+async def ws_queue_done(hass, connection, msg):
+    await _queue_cmd(lambda st, m: st.queue_done(m["item_id"], m.get("day")))(hass, connection, msg)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/queue/plan", vol.Required("item_id"): str, vol.Required("day"): str, vol.Required("slot"): vol.In(SLOTS)})
+@websocket_api.async_response
+async def ws_queue_plan(hass, connection, msg):
+    await _queue_cmd(lambda st, m: st.queue_plan(m["item_id"], m["day"], m["slot"]))(hass, connection, msg)
+
+
+# ---------------- catégories de recettes (#18) ----------------
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/category/add", vol.Required("name"): str})
+@websocket_api.async_response
+async def ws_category_add(hass, connection, msg):
+    await _queue_cmd(lambda st, m: {"name": st.category_add(m["name"])})(hass, connection, msg)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/category/rename", vol.Required("old"): str, vol.Optional("new", default=""): str})
+@websocket_api.async_response
+async def ws_category_rename(hass, connection, msg):
+    await _queue_cmd(lambda st, m: {"recipes": st.category_rename(m["old"], m["new"])})(hass, connection, msg)
 
 
 @websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/shopping/add", vol.Required("name"): str, vol.Optional("qty", default=""): str})

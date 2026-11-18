@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0
+- **Repas à préparer** ([#16](https://github.com/kaaribou/holm-mymenu/issues/16)) : sous le planning, une liste de plats prévus sans jour ni créneau. Nombre de personnes par plat, **Placer dans le planning** (ou glisser sur un repas), **✓ Préparé** (le plat entre dans l'historique), **Retirer**. Bouton **À préparer** dans la fiche d'une recette. Dans l'onglet Courses, **Inclure les repas à préparer** ajoute leurs ingrédients à la liste générée.
+- **Catégories de recettes** ([#18](https://github.com/kaaribou/holm-mymenu/issues/18)) : pastilles par catégorie (avec « Sans catégorie ») en haut de l'onglet Recettes, écran **Gérer** pour créer une catégorie vide, renommer (sur toutes les recettes, avec fusion) ou retirer une catégorie. Choix de la catégorie parmi les existantes dans la fiche d'une recette.
+- **Parcourir mes recettes** ([#18](https://github.com/kaaribou/holm-mymenu/issues/18)) en ajoutant un repas : sous la recherche, les recettes par catégorie (et favoris), avec durée et catégorie.
+- **Historique des repas préparés** et nouvelles commandes WebSocket `holm_mymenu/queue/*`, `holm_mymenu/category/*`, option `include_queue` de `holm_mymenu/shopping/generate` ; l'état de la carte contient `queue`, `cooked` et `recipe_categories`.
+
 ## 1.3.1
 - Préparation de l'entrée dans le catalogue de la Marketplace : validation automatique (Hassfest et HACS) ; textes Telegram inutilisés retirés des fichiers de traduction, qui n'acceptent que les clés de Home Assistant.
 - Aucun changement de fonctionnement.

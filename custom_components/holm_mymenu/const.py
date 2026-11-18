@@ -1,6 +1,6 @@
 """Constantes de HOLM My Menu."""
 DOMAIN = "holm_mymenu"
-VERSION = "1.3.1"
+VERSION = "1.4.0"
 STORAGE_KEY = "holm_mymenu"
 STORAGE_VERSION = 1
 SLOTS = ("midi", "soir")
