@@ -59,7 +59,14 @@ HOLM My Menu is a **Home Assistant** integration designed as a simpler Mealie. Y
 - 📄 **Recipe import from a text PDF**: read locally with `pypdf`, no OCR service or external server. Scanned PDFs without selectable text aren't supported.
 - 🧩 **Sensors** for your automations: lunch menu, dinner menu and next meal.
 
-### 🆕 What's new in 1.4.0
+### 🆕 What's new in 1.5.0
+
+- 🙈 **Card without the planner** ([#16](https://github.com/kaaribou/holm-mymenu/issues/16)): untick **Show the planner** (`show_planning: false`) if you only use **Meals to cook**. The Week tab becomes **To cook**, and the shopping list is generated from those meals only. Nothing is deleted: tick the option again to get your planner back. See [Without the planner](#without-the-planner-meals-to-cook-only).
+- Update: **restart Home Assistant**, then refresh your browser (Ctrl+F5).
+
+![The card without the planner](docs/images/sans-planning.png)
+
+### What's new in 1.4.0
 
 - 🍲 **Meals to cook** ([#16](https://github.com/kaaribou/holm-mymenu/issues/16)): a list of dishes planned for the next few days, **with no day or slot**. Their ingredients go into the shopping list; you choose at the last minute, then ✓ once cooked. See [Meals to cook](#meals-to-cook).
 - 📁 **Recipe categories** ([#18](https://github.com/kaaribou/holm-mymenu/issues/18)): chips at the top of the Recipes tab, like folders (Soups, Fish, Desserts…), with a screen to create, rename or delete them. See [Recipe categories](#recipe-categories).
@@ -161,6 +168,7 @@ type: custom:holm-mymenu-card
 | `week_start` | `monday`, `today` | `monday` | Planner from Monday to Sunday, or starting today (7 days); the card's button switches between them |
 | `list_height` | number (px), `0` = no limit | `620` | Height of the recipe and ingredient lists on a computer (on mobile, the page scrolls); more items load as you scroll |
 | `show_frame` | `true` / `false` | `true` | Show the card background and frame |
+| `show_planning` | `true` / `false` | `true` | Full view: show the planner. With `false`, meals to cook only (see [Without the planner](#without-the-planner-meals-to-cook-only)) |
 | `language` | `fr` · `en` · `de` · `es` · `it` · `nl` · `pt` · `pl` | profile language | Card language |
 
 All these options can also be set in the visual editor.
@@ -203,6 +211,22 @@ On a computer you can also **drag a dish onto a meal** of the plan. **Suggest** 
 In the **Shopping** tab, the **Include meals to cook (N)** box (ticked by default, remembered by the device) adds their ingredients to the generated list, whatever the period chosen. The list's status line shows it ("+ 3 meals to cook").
 
 ![Shopping with meals to cook](docs/images/courses-repas-a-preparer.png)
+
+### Without the planner (meals to cook only)
+
+You never give your meals a day? Untick **Show the planner (otherwise: meals to cook only)** in the card editor (`show_planning: false`). The full view then changes like this:
+
+| Element | Without the planner |
+|---|---|
+| **To cook** tab (instead of **Week**) | Only the **Meals to cook** box, always unfolded, with **Add** highlighted |
+| Meals to cook | − N pers. +, ✓ **Cooked** and ✕ **Remove** as usual; the 📅 **Put in the plan** button disappears |
+| Recipe | **To cook** becomes the main button; **Plan** disappears |
+| **Shopping** tab | No more week or date choice: the line "List from the meals to cook (N)" and **Generate**, which takes the ingredients of those meals only, for the number of people chosen |
+| Gone | The 7-day grid, **Suggest**, **Add to calendar** and the Monday / Today switch |
+
+Recipes, ingredients, reminders and statistics don't change. Your planner is not erased: tick the option again to get it back. The **Today's menu** and **Week** (view-only) views stay tied to the planner.
+
+![Without the planner, the Shopping tab (in French)](docs/images/courses-sans-planning.png)
 
 ### "Today's menu" and "Week" views
 
@@ -435,7 +459,7 @@ Every feature of the card goes through `holm_mymenu/…` WebSocket commands, usa
 | `holm_mymenu/queue/remove` | `item_id` | Remove the meal |
 | `holm_mymenu/category/add` | `name` | Create an empty category |
 | `holm_mymenu/category/rename` | `old`, `new` (empty = remove) | Rename, merge or remove a category |
-| `holm_mymenu/shopping/generate` | `start`, `end`, `include_queue` (true by default) | Generate the shopping list |
+| `holm_mymenu/shopping/generate` | `start`, `end`, `include_queue` (true by default), `include_plan` (true by default; false: meals to cook only) | Generate the shopping list |
 
 The state sent by `holm_mymenu/subscribe` also contains `queue` (meals to cook), `cooked` (last cooked meals: recipe, date, people) and `recipe_categories`. Each recipe has `category`, `prep`, `cook` and `total` (minutes).
 

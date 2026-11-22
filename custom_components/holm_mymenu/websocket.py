@@ -296,7 +296,7 @@ async def ws_plan_move(hass, connection, msg):
 
 # ---------------- courses ----------------
 @websocket_api.websocket_command({vol.Required("type"): "holm_mymenu/shopping/generate", vol.Required("start"): str, vol.Required("end"): str,
-                                  vol.Optional("include_queue", default=True): bool})
+                                  vol.Optional("include_queue", default=True): bool, vol.Optional("include_plan", default=True): bool})
 @websocket_api.async_response
 # API COURSES : générer à partir des recettes sans perdre les ajouts manuels.
 async def ws_shop_generate(hass, connection, msg):
@@ -306,7 +306,7 @@ async def ws_shop_generate(hass, connection, msg):
     except ValueError as err:
         connection.send_error(msg["id"], "invalid_range", str(err))
         return
-    store.generate_shopping(msg["start"], msg["end"], include_queue=msg["include_queue"])
+    store.generate_shopping(msg["start"], msg["end"], include_queue=msg["include_queue"], include_plan=msg["include_plan"])
     store.changed("shopping")
     connection.send_result(msg["id"], {"queue": store.data["shopping"].get("queue", 0)})
 

@@ -647,7 +647,7 @@ class MenuStore:
     # rappels peuvent ensuite afficher la semaine exacte même plusieurs jours
     # après sa génération. Les exclusions restent liées à cette plage.
     # GÉNÉRATION : préserver les articles manuels et les exclusions de la période en cours.
-    def generate_shopping(self, start: str, end: str, keep_manual: bool = True, include_queue: bool = True) -> None:
+    def generate_shopping(self, start: str, end: str, keep_manual: bool = True, include_queue: bool = True, include_plan: bool = True) -> None:
         acc: dict[tuple, dict] = {}
 
         def add(iid, name, qty, unit, source):
@@ -666,7 +666,7 @@ class MenuStore:
 
         d0, d1 = date.fromisoformat(start), date.fromisoformat(end)
         d = d0
-        while d <= d1:
+        while include_plan and d <= d1:   # sans planning (#16) : seulement les repas à préparer
             for slot, entries in self.data["plan"].get(d.isoformat(), {}).items():
                 for e in entries:
                     if e["type"] == "recipe":
@@ -692,8 +692,9 @@ class MenuStore:
                 for line in r.get("ingredients", []):
                     add(line.get("ingredient_id"), line.get("name"), line["qty"] * f if line.get("qty") is not None else None, line.get("unit", ""), r["name"])
         old = self.data["shopping"].get("items", [])
-        previous_range = self.data["shopping"].get("range") or {}
-        same_range = previous_range.get("start") == start and previous_range.get("end") == end
+        new_range = {"start": start, "end": end} if include_plan else None
+        previous_range = self.data["shopping"].get("range") or None
+        same_range = (previous_range or {}).get("start") == start and (previous_range or {}).get("end") == end if include_plan else previous_range is None
         excluded = set(self.data["shopping"].get("excluded", [])) if same_range else set()
         excluded_details = dict(self.data["shopping"].get("excluded_details", {})) if same_range else {}
         checked = {(i.get("ingredient_id") or ingredient_key(i["name"]), i.get("unit")) for i in old if i.get("checked") and not i.get("manual")}
@@ -704,7 +705,7 @@ class MenuStore:
             it["display"] = pretty_qty(it["qty"], it["unit"])
         if keep_manual:
             items += [i for i in old if i.get("manual")]
-        self.data["shopping"] = {"items": items, "range": {"start": start, "end": end}, "generated": time.time(), "excluded": sorted(excluded), "excluded_details": excluded_details, "queue": n_queue}
+        self.data["shopping"] = {"items": items, "range": new_range, "generated": time.time(), "excluded": sorted(excluded), "excluded_details": excluded_details, "queue": n_queue}
 
     def shopping_add(self, name: str, qty: str = "") -> dict:
         ing = self.find_ingredient(name)

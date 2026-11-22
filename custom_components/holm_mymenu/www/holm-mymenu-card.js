@@ -4,6 +4,7 @@
  *   title: Menus            view: full | today | week | stats        tab: week | recipes | ingredients | shopping | stats
  *   today_slots: [midi, soir]   list_height: 620   show_frame: false
  *   week_start: monday | today   (semaine du lundi, ou aujourd'hui + 6 jours)
+ *   show_planning: false   (vue complète sans planning : repas à préparer seulement, #16)
  */
 (() => {
   // ---- HOLM i18n : textes écrits en français, traduits à l'affichage (en, de, es, it, nl, pt, pl) ----
@@ -20,6 +21,9 @@
     "Inclure les repas à préparer ({n})": ["Include meals to cook ({n})", "Zu kochende Gerichte einbeziehen ({n})", "Incluir comidas por preparar ({n})", "Includi i pasti da preparare ({n})", "Te bereiden maaltijden meenemen ({n})", "Incluir refeições a preparar ({n})", "Uwzględnij posiłki do przygotowania ({n})"],
     "+ {n} repas à préparer": ["+ {n} meals to cook", "+ {n} zu kochende Gerichte", "+ {n} comidas por preparar", "+ {n} pasti da preparare", "+ {n} te bereiden maaltijden", "+ {n} refeições a preparar", "+ {n} posiłków do przygotowania"],
     "Repas à préparer": ["Meals to cook", "Zu kochende Gerichte", "Comidas por preparar", "Pasti da preparare", "Te bereiden maaltijden", "Refeições a preparar", "Posiłki do przygotowania"],
+    "Afficher le planning (sinon : repas à préparer seulement)": ["Show the planner (otherwise: meals to cook only)", "Planung anzeigen (sonst: nur zu kochende Gerichte)", "Mostrar la planificación (si no: solo comidas por preparar)", "Mostra il planning (altrimenti: solo pasti da preparare)", "Planning tonen (anders: alleen te koken maaltijden)", "Mostrar o planeamento (senão: só refeições por preparar)", "Pokaż plan (inaczej: tylko posiłki do przygotowania)"],
+    "Choisissez au dernier moment. ✓ quand c'est cuisiné : le plat quitte la liste et entre dans l'historique.": ["Choose at the last minute. ✓ once cooked: the dish leaves the list and goes into the history.", "Entscheiden Sie spontan. ✓ wenn gekocht: das Gericht verlässt die Liste und kommt in den Verlauf.", "Elija en el último momento. ✓ cuando esté cocinado: el plato sale de la lista y pasa al historial.", "Scegli all'ultimo momento. ✓ quando è cucinato: il piatto lascia la lista ed entra nello storico.", "Kies op het laatste moment. ✓ als het gekookt is: het gerecht verlaat de lijst en gaat naar de geschiedenis.", "Escolha no último momento. ✓ quando estiver cozinhado: o prato sai da lista e entra no histórico.", "Wybierz w ostatniej chwili. ✓ gdy ugotowane: danie znika z listy i trafia do historii."],
+    "Liste à partir des repas à préparer ({n})": ["List from the meals to cook ({n})", "Liste aus den zu kochenden Gerichten ({n})", "Lista a partir de las comidas por preparar ({n})", "Lista dai pasti da preparare ({n})", "Lijst op basis van de te koken maaltijden ({n})", "Lista a partir das refeições por preparar ({n})", "Lista z posiłków do przygotowania ({n})"],
     "Placer dans le planning": ["Put in the plan", "In den Plan setzen", "Poner en la planificación", "Metti nel planning", "In de planning zetten", "Colocar no planeamento", "Dodaj do planu"],
     "Préparé": ["Cooked", "Gekocht", "Preparado", "Preparato", "Bereid", "Preparado", "Przygotowane"],
     "Retirer": ["Remove", "Entfernen", "Quitar", "Rimuovi", "Verwijderen", "Retirar", "Usuń"],
@@ -508,7 +512,7 @@
     if (o.selector && o.selector.select && o.name !== "language") o.selector = { ...o.selector, select: { ...o.selector.select, options: (o.selector.select.options || []).map((op) => (typeof op === "string" ? op : { ...op, label: _(op.label) })) } };
     if (o.name === "language" && o.selector && o.selector.select) o.selector = { ...o.selector, select: { ...o.selector.select, options: o.selector.select.options.map((op) => (op.value ? op : { ...op, label: _("Automatique (profil)") })) } };
     return o; });
-const VERSION = "1.4.0";
+const VERSION = "1.5.0";
 // Shared by the Telegram sharing dialog and the calendar export dialog.
 const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v == null ? d : v; } catch (_) { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
@@ -614,6 +618,8 @@ class HolmMyMenuCard extends HTMLElement {
     this._render();
   }
   _ws(type, data = {}) { return this._hass.callWS({ type: `holm_mymenu/${type}`, ...data }); }
+  // #16 : vue complète sans planning (show_planning: false) — seulement les repas à préparer
+  _noPlan() { return !!this._c && this._c.show_planning === false && (this._c.view || "full") === "full"; }
   _toast(msg) { const ev = new Event("hass-notification", { bubbles: true, composed: true }); ev.detail = { message: msg }; (document.querySelector("home-assistant") || this).dispatchEvent(ev); }
   async _do(p, ok) { try { const r = await p; if (ok) this._toast(ok); return r; } catch (e) { this._toast(`HOLM My Menu : ${(e && e.message) || e}`); throw e; } }
 
@@ -632,7 +638,7 @@ class HolmMyMenuCard extends HTMLElement {
     else if (c.view === "week") body = this._weekRO();
     else if (c.view === "stats") body = this._statsView();
     else body = ({ week: this._weekView, recipes: this._recipesView, ingredients: this._ingView, shopping: this._shopView, reminders: this._remindersView, stats: this._statsView }[this._tab] || this._weekView).call(this);
-    const tabs = [["week", "mdi:calendar-week", _("Semaine")], ["recipes", "mdi:book-open-page-variant", _("Recettes")], ["ingredients", "mdi:food-apple", _("Ingrédients")], ["shopping", "mdi:cart-outline", _("Courses")], ["reminders", "mdi:bell-outline", _("Rappels")], ["stats", "mdi:chart-box-outline", _("Stats")]];
+    const tabs = [this._noPlan() ? ["week", "mdi:pot-steam-outline", _("À préparer")] : ["week", "mdi:calendar-week", _("Semaine")], ["recipes", "mdi:book-open-page-variant", _("Recettes")], ["ingredients", "mdi:food-apple", _("Ingrédients")], ["shopping", "mdi:cart-outline", _("Courses")], ["reminders", "mdi:bell-outline", _("Rappels")], ["stats", "mdi:chart-box-outline", _("Stats")]];
     const nShop = s ? (s.shopping.items || []).filter((i) => !i.checked).length : 0;
     const keepModal = this.shadowRoot.querySelector(".modal-root");
     this.shadowRoot.innerHTML = `<style>${CSS}</style>
@@ -745,6 +751,11 @@ class HolmMyMenuCard extends HTMLElement {
       case "reminder-toggle": { const r=(this._s.reminders||[]).find(x=>x.id===d.id); if(r) return this._ws("reminder/save",{reminder_id:r.id,reminder:{...r,enabled:!r.enabled}}); return; }
       case "reminder-delete": if(confirm(_("Supprimer ce rappel ?"))) return this._ws("reminder/delete",{reminder_id:d.id}); return;
       case "shop-gen": {
+        if (this._noPlan()) {   // #16 : sans planning, la liste vient des seuls repas à préparer
+          const t = iso(new Date());
+          await this._do(this._ws("shopping/generate", { start: t, end: t, include_plan: false, include_queue: true }), _("Liste de courses générée"));
+          return;
+        }
         if (this._shopMode === "dates") {
           const [f, t] = this._shopDates();
           if (t < f) return this._toast(_("La date de fin est avant la date de début"));
@@ -804,6 +815,7 @@ class HolmMyMenuCard extends HTMLElement {
         ${ings.length ? `<div class="sxi">${ings.map((i) => `<span>${i.image ? `<em style="background-image:url('${esc(i.image)}')"></em>` : `<ha-icon icon="mdi:food-apple-outline"></ha-icon>`}${esc(i.name)}</span>`).join("")}</div>` : ""}</div>`;
   }
   _weekView() {
+    if (this._noPlan()) return this._queueHtml(true);
     const s = this._s, w0 = this._week, today = iso(new Date());
     const days = [...Array(7)].map((_, i) => addDays(w0, i));
     const w1 = days[6];
@@ -821,18 +833,19 @@ class HolmMyMenuCard extends HTMLElement {
       ${this._queueHtml()}`;
   }
   // ----- repas à préparer (#16) : choisis pour les prochains jours, sans jour ni créneau -----
-  _queueHtml() {
-    const s = this._s, q = (s.queue || []).filter((x) => s.recipes[x.recipe_id]);
-    return `<div class="queue ${this._qFold ? "fold" : ""}">
-      <div class="qh"><button class="qt" data-act="queue-fold"><ha-icon icon="mdi:pot-steam-outline"></ha-icon>${_("Repas à préparer")}<em>${q.length}</em><ha-icon class="chev" icon="mdi:chevron-${this._qFold ? "down" : "up"}"></ha-icon></button>
-        <button class="pill" data-act="queue-add"><ha-icon icon="mdi:plus"></ha-icon>${_("Ajouter")}</button></div>
-      ${this._qFold ? "" : q.length ? `<div class="qlist">${q.map((x) => { const r = s.recipes[x.recipe_id]; return `<div class="qi" draggable="true" data-qid="${x.id}">
+  _queueHtml(solo = false) {
+    // solo : sans planning (#16), le cadre est la page entière, toujours déplié, sans bouton « placer dans le planning »
+    const s = this._s, q = (s.queue || []).filter((x) => s.recipes[x.recipe_id]), fold = !solo && this._qFold;
+    return `<div class="queue ${fold ? "fold" : ""} ${solo ? "solo" : ""}">
+      <div class="qh">${solo ? `<div class="qt"><ha-icon icon="mdi:pot-steam-outline"></ha-icon>${_("Repas à préparer")}<em>${q.length}</em></div>` : `<button class="qt" data-act="queue-fold"><ha-icon icon="mdi:pot-steam-outline"></ha-icon>${_("Repas à préparer")}<em>${q.length}</em><ha-icon class="chev" icon="mdi:chevron-${this._qFold ? "down" : "up"}"></ha-icon></button>`}
+        <button class="pill ${solo ? "main" : ""}" data-act="queue-add"><ha-icon icon="mdi:plus"></ha-icon>${_("Ajouter")}</button></div>
+      ${fold ? "" : q.length ? `<div class="qlist">${q.map((x) => { const r = s.recipes[x.recipe_id]; return `<div class="qi" draggable="true" data-qid="${x.id}">
           <div class="ei op" data-act="queue-open" data-rid="${r.id}" data-sv="${x.servings}" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}>${r.image ? "" : `<ha-icon icon="mdi:chef-hat"></ha-icon>`}</div>
           <div class="en"><b class="lnk2" data-act="queue-open" data-rid="${r.id}" data-sv="${x.servings}">${esc(r.name)}</b><small>${this._rtime(r) ? mins(this._rtime(r)) + " · " : ""}<span class="stp"><button data-act="queue-sv" data-id="${x.id}" data-sv="${x.servings}" data-d="-1">−</button>${_("{n} pers.", { n: x.servings })}<button data-act="queue-sv" data-id="${x.id}" data-sv="${x.servings}" data-d="1">+</button></span></small></div>
-          <button class="ib" data-act="queue-plan" data-id="${x.id}" title="${_("Placer dans le planning")}"><ha-icon icon="mdi:calendar-arrow-right"></ha-icon></button>
+          ${solo ? "" : `<button class="ib" data-act="queue-plan" data-id="${x.id}" title="${_("Placer dans le planning")}"><ha-icon icon="mdi:calendar-arrow-right"></ha-icon></button>`}
           <button class="ib ok" data-act="queue-done" data-id="${x.id}" title="${_("Préparé")}"><ha-icon icon="mdi:check-circle-outline"></ha-icon></button>
           <button class="ib" data-act="queue-rm" data-id="${x.id}" title="${_("Retirer")}"><ha-icon icon="mdi:close"></ha-icon></button></div>`; }).join("")}</div>
-        <div class="hint">${_("Prévus sans jour fixe : choisissez au dernier moment. ✓ quand c'est cuisiné, ou glissez un repas sur un jour du planning.")}</div>`
+        <div class="hint">${solo ? _("Choisissez au dernier moment. ✓ quand c'est cuisiné : le plat quitte la liste et entre dans l'historique.") : _("Prévus sans jour fixe : choisissez au dernier moment. ✓ quand c'est cuisiné, ou glissez un repas sur un jour du planning.")}</div>`
       : `<div class="muted qempty">${_("Ajoutez ici les plats prévus pour les prochains jours, sans leur donner de jour : leurs ingrédients vont dans la liste de courses et vous choisissez au dernier moment.")}</div>`}</div>`;
   }
   _queueAddModal() {
@@ -1254,9 +1267,10 @@ class HolmMyMenuCard extends HTMLElement {
       : `<button class="ib" data-act="shop-week-prev"><ha-icon icon="mdi:chevron-left"></ha-icon></button>
         <div class="wk">${_("Semaine du {a} au {b}", { a: fdate(w0, { day: "numeric", month: "short" }), b: fdate(w1, { day: "numeric", month: "short" }) })}</div>
         <button class="ib" data-act="shop-week-next"><ha-icon icon="mdi:chevron-right"></ha-icon></button>`;
-    return `<div class="bar shopbar">${seg}${picker}
+    const np = this._noPlan();
+    return `<div class="bar shopbar">${np ? `<div class="wk qsrc"><ha-icon icon="mdi:pot-steam-outline"></ha-icon>${_("Liste à partir des repas à préparer ({n})", { n: (s.queue || []).length })}</div>` : seg + picker}
         <button class="pill main" data-act="shop-gen"><ha-icon icon="mdi:cart-arrow-down"></ha-icon>${_("Générer")}</button></div>
-      ${(s.queue || []).length ? `<label class="qinc"><input type="checkbox" data-act="shop-queue" data-ev="change" ${this._shopQueue !== false ? "checked" : ""}><ha-icon icon="mdi:pot-steam-outline"></ha-icon>${_("Inclure les repas à préparer ({n})", { n: s.queue.length })}</label>` : ""}
+      ${!np && (s.queue || []).length ? `<label class="qinc"><input type="checkbox" data-act="shop-queue" data-ev="change" ${this._shopQueue !== false ? "checked" : ""}><ha-icon icon="mdi:pot-steam-outline"></ha-icon>${_("Inclure les repas à préparer ({n})", { n: s.queue.length })}</label>` : ""}
       <div class="bar"><input class="shop-add" placeholder="${_("Ajouter un article (Entrée)…")}"><button class="pill" data-act="shop-category"><ha-icon icon="mdi:shape-plus"></ha-icon>${_("Rayons")}</button>${(sh.excluded || []).length ? `<button class="pill" data-act="shop-restore" title="${_("Voir et restaurer les articles retirés")}">${_("Articles retirés")} (${sh.excluded.length})</button>` : ""}</div>
       ${items.length ? `<div class="shopmeta">${rng}${rng ? " · " : ""}${sh.queue ? _("+ {n} repas à préparer", { n: sh.queue }) + " · " : ""}${_("{d}/{n} pris", { d: done, n: items.length })}
           ${done ? `<button class="lnk" data-act="shop-clear-checked">${_("Retirer les articles pris")}</button>` : ""}</div>
@@ -1842,8 +1856,8 @@ class HolmMyMenuCard extends HTMLElement {
       const mb = this._modal(esc(r.name), `
         <div class="rhero" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}></div>
         <div class="rmeta">${r.prep ? `<span><ha-icon icon="mdi:knife"></ha-icon>${_("Prépa")} ${mins(r.prep)}</span>` : ""}${r.cook ? `<span><ha-icon icon="mdi:stove"></ha-icon>${_("Cuisson")} ${mins(r.cook)}</span>` : ""}${r.total ? `<span><ha-icon icon="mdi:clock-outline"></ha-icon>${mins(r.total)}</span>` : ""}${r.category ? `<span><ha-icon icon="mdi:tag-outline"></ha-icon>${esc(r.category)}</span>` : ""}${r.rating ? `<span><ha-icon icon="mdi:star"></ha-icon>${fq(r.rating)}</span>` : ""}${!ro && r.mealie_enabled ? `<button class="mealie-x${r.mealie_slug ? " on" : ""}" data-x="mealie" title="${r.mealie_slug ? _("Ouvrir dans Mealie") : _("Envoyer vers Mealie")}" aria-label="${r.mealie_slug ? _("Ouvrir dans Mealie") : _("Envoyer vers Mealie")}"><ha-icon icon="mdi:chef-hat"></ha-icon>${r.mealie_slug ? `<ha-icon class="ok" icon="mdi:check-circle"></ha-icon>` : ""}</button>` : ""}</div>
-        ${ro ? (r.source_url ? `<div class="row act"><a class="pill" href="${esc(r.source_url)}" target="_blank" rel="noopener"><ha-icon icon="mdi:open-in-new"></ha-icon>${_("Voir la recette d'origine")}</a></div>` : "") : `<div class="row act"><button class="pill main" data-x="plan"><ha-icon icon="mdi:calendar-plus"></ha-icon>${_("Planifier")}</button>
-          <button class="pill" data-x="queue" title="${_("À cuisiner dans les prochains jours, sans jour fixe")}"><ha-icon icon="mdi:pot-steam-outline"></ha-icon>${_("À préparer")}</button>
+        ${ro ? (r.source_url ? `<div class="row act"><a class="pill" href="${esc(r.source_url)}" target="_blank" rel="noopener"><ha-icon icon="mdi:open-in-new"></ha-icon>${_("Voir la recette d'origine")}</a></div>` : "") : `<div class="row act">${this._noPlan() ? "" : `<button class="pill main" data-x="plan"><ha-icon icon="mdi:calendar-plus"></ha-icon>${_("Planifier")}</button>`}
+          <button class="pill ${this._noPlan() ? "main" : ""}" data-x="queue" title="${_("À cuisiner dans les prochains jours, sans jour fixe")}"><ha-icon icon="mdi:pot-steam-outline"></ha-icon>${_("À préparer")}</button>
           <button class="pill" data-x="fav"><ha-icon icon="mdi:heart${r.favorite ? "" : "-outline"}"></ha-icon>${r.favorite ? _("Favori") : _("Ajouter aux favoris")}</button>
           <button class="pill" data-x="edit"><ha-icon icon="mdi:pencil"></ha-icon>${_("Modifier")}</button>
           <button class="pill" data-x="dup" title="${_("Créer une copie à modifier, l'original reste intact")}"><ha-icon icon="mdi:content-copy"></ha-icon>${_("Dupliquer")}</button>
@@ -1862,7 +1876,7 @@ class HolmMyMenuCard extends HTMLElement {
       mb.querySelector('[data-x="fav"]').addEventListener("click", async () => { r = await this._ws("recipe/save", { recipe_id: r.id, recipe: { favorite: !r.favorite } }); draw(); });
       mb.querySelector('[data-x="edit"]').addEventListener("click", () => this._editRecipe(r));
       mb.querySelector('[data-x="del"]').addEventListener("click", async () => { if (!confirm(_("Supprimer « {n} » ?", { n: r.name }))) return; await this._ws("recipe/delete", { recipe_id: r.id }); this._close(); });
-      mb.querySelector('[data-x="plan"]').addEventListener("click", () => this._planRecipe(r, sv, () => draw()));
+      mb.querySelector('[data-x="plan"]')?.addEventListener("click", () => this._planRecipe(r, sv, () => draw()));
       mb.querySelector('[data-x="queue"]').addEventListener("click", () => this._do(this._ws("queue/add", { recipe_id: r.id, servings: sv }), _("« {n} » ajoutée aux repas à préparer", { n: r.name })));
       mb.querySelector('[data-x="mealie"]')?.addEventListener("click", async (e) => {
         const b = e.currentTarget;
@@ -2246,6 +2260,8 @@ const CSS = `
 .catl { display:flex; flex-direction:column; gap:6px; margin:12px 0; } .catr { display:flex; align-items:center; gap:8px; } .catr ha-icon { color:var(--ac); flex:none; } .catr em { font-style:normal; font-size:11.5px; opacity:.65; white-space:nowrap; }
 .queue { margin-top:14px; padding:10px 12px; border-radius:14px; border:1px solid var(--bd); background:color-mix(in srgb, var(--ac) 6%, transparent); }
 .qh { display:flex; align-items:center; gap:8px; }
+.queue.solo { margin-top:0; } .queue.solo .qt { cursor:default; font-size:15px; }
+.wk.qsrc { display:flex; align-items:center; gap:6px; justify-content:flex-start; } .wk.qsrc ha-icon { --mdc-icon-size:18px; color:var(--ac); }
 .qt { display:flex; align-items:center; gap:7px; flex:1; border:0; background:none; padding:0; font:inherit; font-size:14px; font-weight:700; color:var(--primary-text-color); cursor:pointer; text-align:left; }
 .qt ha-icon { --mdc-icon-size:19px; color:var(--ac); } .qt .chev { color:inherit; opacity:.55; } .qt em { font-style:normal; font-size:11px; padding:0 7px; border-radius:999px; background:var(--sf); }
 .qlist { display:grid; grid-template-columns:repeat(auto-fill, minmax(290px, 1fr)); gap:6px; margin-top:10px; }
@@ -2264,7 +2280,7 @@ button { font:inherit; color:inherit; cursor:pointer; }
 .tt ha-icon { color:var(--ac); }
 .tabs { display:flex; gap:3px; padding:3px; border-radius:14px; background:var(--sf); }
 .tab { display:flex; align-items:center; gap:6px; border:0; background:none; padding:7px 12px; border-radius:11px; font-size:13px; font-weight:600; color:var(--secondary-text-color); position:relative; }
-.tab ha-icon { --mdc-icon-size:18px; }
+.tab ha-icon { --mdc-icon-size:18px; } .tab span { white-space:nowrap; }
 .tab.on { background:color-mix(in srgb, var(--ac) 22%, transparent); color:var(--primary-text-color); }
 .tab em { font-style:normal; font-size:10.5px; min-width:16px; height:16px; line-height:16px; border-radius:8px; background:var(--ac2); color:#111; padding:0 4px; }
 @container (max-width: 560px) { .tab span { display:none; } .tab { padding:8px 11px; } }
@@ -2525,7 +2541,7 @@ class HolmMyMenuCardEditor extends HTMLElement {
     this._lang = setLang(this._hass, this._c);
     if (!this._f) {
       this._f = document.createElement("ha-form");
-      this._f.computeLabel = (s) => ({ language: _("Langue"), title: _("Titre"), view: _("Affichage"), tab: _("Onglet à l'ouverture"), week_start: _("Début du planning"), show_frame: _("Afficher le cadre"), today_slots: _("Repas affichés (toutes les vues)"), list_height: _("Hauteur des listes en px (0 = sans limite)") }[s.name] || s.name);
+      this._f.computeLabel = (s) => ({ language: _("Langue"), title: _("Titre"), view: _("Affichage"), tab: _("Onglet à l'ouverture"), week_start: _("Début du planning"), show_frame: _("Afficher le cadre"), today_slots: _("Repas affichés (toutes les vues)"), list_height: _("Hauteur des listes en px (0 = sans limite)"), show_planning: _("Afficher le planning (sinon : repas à préparer seulement)") }[s.name] || s.name);
       this._f.schema = [langField(), { name: "title", selector: { text: {} } },
         { type: "grid", name: "", schema: [
           { name: "view", selector: { select: { mode: "dropdown", options: [{ value: "full", label: _("Complet (semaine, recettes, ingrédients, courses)") }, { value: "today", label: _("Menu du jour (compact, consultation)") }, { value: "week", label: _("Semaine (planning, consultation)") }, { value: "stats", label: _("Statistiques") }] } } },
@@ -2533,11 +2549,12 @@ class HolmMyMenuCardEditor extends HTMLElement {
         { name: "week_start", selector: { select: { mode: "dropdown", options: [{ value: "monday", label: _("Lundi (semaine en cours)") }, { value: "today", label: _("Aujourd'hui (7 prochains jours)") }] } } },
         { name: "today_slots", selector: { select: { multiple: true, mode: "list", options: [{ value: "midi", label: _("Midi") }, { value: "soir", label: _("Soir") }] } } },
         { name: "list_height", selector: { number: { min: 0, max: 2000, step: 20, mode: "box", unit_of_measurement: "px" } } },
-        { name: "show_frame", selector: { boolean: {} } }];
+        { type: "grid", name: "", schema: [{ name: "show_frame", selector: { boolean: {} } }, { name: "show_planning", selector: { boolean: {} } }] }];
       this._f.addEventListener("value-changed", (e) => {
         const v = { ...this._c, ...e.detail.value };
         ["view", "tab"].forEach((k) => { if (v[k] === { view: "full", tab: "week" }[k]) delete v[k]; });
         if (v.show_frame !== false) delete v.show_frame;
+        if (v.show_planning !== false) delete v.show_planning;
         if (v.week_start !== "today") delete v.week_start;
         if (Array.isArray(v.today_slots) && (!v.today_slots.length || v.today_slots.length === 2)) delete v.today_slots;
         if (v.list_height === 620 || v.list_height === undefined || v.list_height === null) delete v.list_height;
@@ -2547,7 +2564,7 @@ class HolmMyMenuCardEditor extends HTMLElement {
       this.appendChild(this._f);
     }
     this._f.hass = this._hass;
-    this._f.data = { view: "full", tab: "week", week_start: "monday", show_frame: true, today_slots: ["midi", "soir"], list_height: 620, ...this._c };
+    this._f.data = { view: "full", tab: "week", week_start: "monday", show_frame: true, show_planning: true, today_slots: ["midi", "soir"], list_height: 620, ...this._c };
   }
 }
 

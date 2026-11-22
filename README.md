@@ -58,7 +58,14 @@ HOLM My Menu est une intégration **Home Assistant** pensée comme un Mealie en 
 - 🧩 **Capteurs** pour vos automatisations : menu du midi, menu du soir et prochain repas.
 
 
-### 🆕 Nouveautés de la 1.4.0
+### 🆕 Nouveautés de la 1.5.0
+
+- 🙈 **Carte sans planning** ([#16](https://github.com/kaaribou/holm-mymenu/issues/16)) : décochez **Afficher le planning** (`show_planning: false`) si vous n'utilisez que les **Repas à préparer**. L'onglet Semaine devient **À préparer**, et la liste de courses se génère à partir de ces seuls repas. Rien n'est supprimé : recochez l'option pour retrouver votre planning. Voir [Sans planning](#sans-planning-repas-à-préparer-seulement).
+- Mise à jour : **redémarrez Home Assistant**, puis rafraîchissez le navigateur (Ctrl+F5).
+
+![La carte sans planning](docs/images/sans-planning.png)
+
+### Nouveautés de la 1.4.0
 
 - 🍲 **Repas à préparer** ([#16](https://github.com/kaaribou/holm-mymenu/issues/16)) : une liste de plats prévus pour les prochains jours, **sans jour ni créneau**. Leurs ingrédients vont dans la liste de courses ; vous choisissez au dernier moment, puis ✓ quand c'est cuisiné. Voir [Repas à préparer](#repas-à-préparer).
 - 📁 **Catégories de recettes** ([#18](https://github.com/kaaribou/holm-mymenu/issues/18)) : des pastilles en haut de l'onglet Recettes, comme des dossiers (Soupes, Poisson, Desserts…), avec un écran pour les créer, les renommer ou les supprimer. Voir [Catégories](#catégories-de-recettes).
@@ -163,6 +170,7 @@ type: custom:holm-mymenu-card
 | `week_start` | `monday`, `today` | `monday` | Planning du lundi au dimanche, ou à partir d'aujourd'hui (7 jours) ; le bouton de la carte permet de basculer |
 | `list_height` | nombre (px), `0` = sans limite | `620` | Hauteur des listes de recettes et d'ingrédients sur ordinateur (sur mobile, c'est la page qui défile) ; la suite se charge au fil du défilement |
 | `show_frame` | `true` / `false` | `true` | Afficher le fond et le cadre de la carte |
+| `show_planning` | `true` / `false` | `true` | Vue complète : afficher le planning. Avec `false`, seulement les repas à préparer (voir [Sans planning](#sans-planning-repas-à-préparer-seulement)) |
 | `language` | `fr` · `en` · `de` · `es` · `it` · `nl` · `pt` · `pl` | langue du profil | Langue de la carte |
 
 Toutes ces options se règlent aussi dans l'éditeur visuel.
@@ -205,6 +213,22 @@ Sur ordinateur, vous pouvez aussi **glisser un plat sur un repas** du planning. 
 Dans l'onglet **Courses**, la case **Inclure les repas à préparer (N)** (cochée par défaut, choix retenu par l'appareil) ajoute leurs ingrédients à la liste générée, quelle que soit la période choisie. La ligne d'état de la liste l'indique (« + 3 repas à préparer »).
 
 ![Courses avec les repas à préparer](docs/images/courses-repas-a-preparer.png)
+
+### Sans planning (repas à préparer seulement)
+
+Vous ne donnez jamais de jour à vos repas ? Décochez **Afficher le planning (sinon : repas à préparer seulement)** dans l'éditeur de la carte (`show_planning: false`). La vue complète change ainsi :
+
+| Élément | Sans planning |
+|---|---|
+| Onglet **À préparer** (à la place de **Semaine**) | Seulement le cadre **Repas à préparer**, toujours déplié, avec **Ajouter** mis en avant |
+| Repas à préparer | − N pers. +, ✓ **Préparé** et ✕ **Retirer** comme d'habitude ; le bouton 📅 **Placer dans le planning** disparaît |
+| Fiche d'une recette | **À préparer** devient le bouton principal ; **Planifier** disparaît |
+| Onglet **Courses** | Plus de choix de semaine ou de dates : la ligne « Liste à partir des repas à préparer (N) » et **Générer**, qui reprend les ingrédients de ces seuls repas, au nombre de personnes choisi |
+| Disparus | La grille des 7 jours, **Suggérer**, **Ajouter au calendrier** et la bascule Lundi / Aujourd'hui |
+
+Les recettes, les ingrédients, les rappels et les statistiques ne changent pas. Votre planning n'est pas effacé : recochez l'option pour le retrouver. Les vues **Menu du jour** et **Semaine** (consultation) restent liées au planning.
+
+![Sans planning, l'onglet Courses](docs/images/courses-sans-planning.png)
 
 ### Vues « Menu du jour » et « Semaine »
 
@@ -437,7 +461,7 @@ Toutes les fonctions de la carte passent par des commandes WebSocket `holm_mymen
 | `holm_mymenu/queue/remove` | `item_id` | Retire le repas |
 | `holm_mymenu/category/add` | `name` | Crée une catégorie vide |
 | `holm_mymenu/category/rename` | `old`, `new` (vide = retirer) | Renomme, fusionne ou retire une catégorie |
-| `holm_mymenu/shopping/generate` | `start`, `end`, `include_queue` (vrai par défaut) | Génère la liste de courses |
+| `holm_mymenu/shopping/generate` | `start`, `end`, `include_queue` (vrai par défaut), `include_plan` (vrai par défaut ; faux : seulement les repas à préparer) | Génère la liste de courses |
 
 L'état envoyé par `holm_mymenu/subscribe` contient aussi `queue` (repas à préparer), `cooked` (derniers repas préparés : recette, date, personnes) et `recipe_categories`. Chaque recette porte `category`, `prep`, `cook` et `total` (minutes).
 

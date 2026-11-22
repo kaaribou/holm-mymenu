@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.0
+- **Carte sans planning** ([#16](https://github.com/kaaribou/holm-mymenu/issues/16)) : nouvelle option `show_planning` (« Afficher le planning », cochée par défaut). Décochée, la vue complète n'affiche que les **Repas à préparer** : onglet **À préparer** à la place de Semaine, plus de grille, de Suggérer, d'Ajouter au calendrier ni de « Placer dans le planning » ; **À préparer** devient le bouton principal de la fiche recette ; l'onglet Courses génère la liste à partir des seuls repas à préparer. Le planning existant est conservé.
+- Nouvelle option `include_plan` de `holm_mymenu/shopping/generate` (vrai par défaut) ; avec `false`, la liste n'a pas de période.
+- Traductions dans les 8 langues. Redémarrage de Home Assistant nécessaire.
+
 ## 1.4.0
 - **Repas à préparer** ([#16](https://github.com/kaaribou/holm-mymenu/issues/16)) : sous le planning, une liste de plats prévus sans jour ni créneau. Nombre de personnes par plat, **Placer dans le planning** (ou glisser sur un repas), **✓ Préparé** (le plat entre dans l'historique), **Retirer**. Bouton **À préparer** dans la fiche d'une recette. Dans l'onglet Courses, **Inclure les repas à préparer** ajoute leurs ingrédients à la liste générée.
 - **Catégories de recettes** ([#18](https://github.com/kaaribou/holm-mymenu/issues/18)) : pastilles par catégorie (avec « Sans catégorie ») en haut de l'onglet Recettes, écran **Gérer** pour créer une catégorie vide, renommer (sur toutes les recettes, avec fusion) ou retirer une catégorie. Choix de la catégorie parmi les existantes dans la fiche d'une recette.
